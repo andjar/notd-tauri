@@ -1,0 +1,19 @@
+{
+  "name": "notd",
+  "version": "1.0.0",
+  "description": "A simple, durable, **block-based** outliner application that combines the simplicity of `nb` with powerful note-taking and journaling features. Built for **simplicity, longevity, and data ownership**.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@tauri-apps/api": "^2.0.0-beta.0",
+    "@tauri-apps/plugin-dialog": "^2.0.0-beta.0",
+    "vite": "^7.1.5"
+  }
+}
