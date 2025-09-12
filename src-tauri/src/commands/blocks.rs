@@ -48,14 +48,13 @@ pub async fn create_block(
     request: CreateBlockRequest,
 ) -> Result<CommandResponse<Block>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.create_block(
-            request.page_id,
-            request.parent_id,
-            &request.content,
-            request.position
-        )
-    ))
+    let result = state.database.lock().await.create_block(
+        request.page_id,
+        request.parent_id,
+        &request.content,
+        request.position
+    ).await;
+    Ok(result.into())
 }
 
 /// Get block by ID
@@ -65,9 +64,8 @@ pub async fn get_block(
     block_id: i32,
 ) -> Result<CommandResponse<Option<Block>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_block(block_id)
-    ))
+    let result = state.database.lock().await.get_block(block_id).await;
+    Ok(result.into())
 }
 
 /// Get block by UUID
@@ -77,9 +75,8 @@ pub async fn get_block_by_uuid(
     uuid: String,
 ) -> Result<CommandResponse<Option<Block>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_block_by_uuid(&uuid)
-    ))
+    let result = state.database.lock().await.get_block_by_uuid(&uuid).await;
+    Ok(result.into())
 }
 
 /// Update block content
@@ -90,9 +87,8 @@ pub async fn update_block(
     request: UpdateBlockRequest,
 ) -> Result<CommandResponse<()>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.update_block_content(block_id, &request.content)
-    ))
+    let result = state.database.lock().await.update_block_content(block_id, &request.content).await;
+    Ok(result.into())
 }
 
 /// Update block content by UUID
@@ -103,9 +99,8 @@ pub async fn update_block_by_uuid(
     request: UpdateBlockRequest,
 ) -> Result<CommandResponse<()>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.update_block_content_by_uuid(&uuid, &request.content)
-    ))
+    let result = state.database.lock().await.update_block_content_by_uuid(&uuid, &request.content).await;
+    Ok(result.into())
 }
 
 /// Delete block and all its children
@@ -115,9 +110,8 @@ pub async fn delete_block(
     block_id: i32,
 ) -> Result<CommandResponse<()>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.delete_block(block_id)
-    ))
+    let result = state.database.lock().await.delete_block(block_id).await;
+    Ok(result.into())
 }
 
 /// Delete block by UUID
@@ -127,9 +121,8 @@ pub async fn delete_block_by_uuid(
     uuid: String,
 ) -> Result<CommandResponse<()>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.delete_block_by_uuid(&uuid)
-    ))
+    let result = state.database.lock().await.delete_block_by_uuid(&uuid).await;
+    Ok(result.into())
 }
 
 // ================================
@@ -143,9 +136,8 @@ pub async fn get_page_blocks(
     page_id: i32,
 ) -> Result<CommandResponse<Vec<BlockHierarchy>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_page_blocks(page_id)
-    ))
+    let result = state.database.lock().await.get_page_blocks(page_id).await;
+    Ok(result.into())
 }
 
 /// Get children of a specific block
@@ -155,9 +147,8 @@ pub async fn get_block_children(
     block_id: i32,
 ) -> Result<CommandResponse<Vec<Block>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_block_children(block_id)
-    ))
+    let result = state.database.lock().await.get_block_children(block_id).await;
+    Ok(result.into())
 }
 
 /// Get all descendants of a block (recursive children)
@@ -167,9 +158,8 @@ pub async fn get_block_descendants(
     block_id: i32,
 ) -> Result<CommandResponse<Vec<Block>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_block_descendants(block_id)
-    ))
+    let result = state.database.lock().await.get_block_descendants(block_id).await;
+    Ok(result.into())
 }
 
 // ================================
@@ -184,13 +174,12 @@ pub async fn move_block(
     request: MoveBlockRequest,
 ) -> Result<CommandResponse<()>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.move_block(
-            block_id,
-            request.new_parent_id,
-            request.new_position
-        )
-    ))
+    let result = state.database.lock().await.move_block(
+        block_id,
+        request.new_parent_id,
+        request.new_position
+    ).await;
+    Ok(result.into())
 }
 
 /// Reorder block within current parent
@@ -201,9 +190,8 @@ pub async fn reorder_block(
     new_position: usize,
 ) -> Result<CommandResponse<()>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.reorder_block(block_id, new_position)
-    ))
+    let result = state.database.lock().await.reorder_block(block_id, new_position).await;
+    Ok(result.into())
 }
 
 /// Indent block (make it child of previous sibling)
@@ -213,9 +201,8 @@ pub async fn indent_block(
     block_id: i32,
 ) -> Result<CommandResponse<()>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.indent_block(block_id)
-    ))
+    let result = state.database.lock().await.indent_block(block_id).await;
+    Ok(result.into())
 }
 
 /// Outdent block (move to parent's level)
@@ -225,9 +212,8 @@ pub async fn outdent_block(
     block_id: i32,
 ) -> Result<CommandResponse<()>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.outdent_block(block_id)
-    ))
+    let result = state.database.lock().await.outdent_block(block_id).await;
+    Ok(result.into())
 }
 
 // ================================
@@ -241,9 +227,8 @@ pub async fn get_block_properties(
     block_id: i32,
 ) -> Result<CommandResponse<Vec<BlockProperty>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_block_properties(block_id)
-    ))
+    let result = state.database.lock().await.get_block_properties(block_id).await;
+    Ok(result.into())
 }
 
 /// Set block property
@@ -259,14 +244,13 @@ pub async fn set_block_property(
         _ => PropertyType::Text,
     };
     
-    Ok(command_wrapper!(
-        state.database.lock().await.set_block_property(
-            block_id,
-            &request.key,
-            &request.value,
-            property_type
-        )
-    ))
+    let result = state.database.lock().await.set_block_property(
+        block_id,
+        &request.key,
+        &request.value,
+        property_type
+    ).await;
+    Ok(result.into())
 }
 
 /// Delete block property
@@ -277,9 +261,8 @@ pub async fn delete_block_property(
     key: String,
 ) -> Result<CommandResponse<()>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.delete_block_property(block_id, &key)
-    ))
+    let result = state.database.lock().await.delete_block_property(block_id, &key).await;
+    Ok(result.into())
 }
 
 // ================================

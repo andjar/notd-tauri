@@ -1,8 +1,8 @@
 // Page Database Operations
 // Phase 1: CRUD operations for page management and navigation
 
-use rusqlite::{params, OptionalExtension, Result as SqlResult};
-use chrono::{DateTime, Utc};
+use rusqlite::{params, OptionalExtension};
+use chrono::Utc;
 use anyhow::Result;
 
 use super::{Database, Page, DbResult, ORDER_GAP};

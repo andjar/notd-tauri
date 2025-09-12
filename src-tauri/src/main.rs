@@ -114,11 +114,27 @@ fn main() {
             // Block management commands
             commands::blocks::create_block,
             commands::blocks::get_block,
+            commands::blocks::get_block_by_uuid,
             commands::blocks::update_block,
+            commands::blocks::update_block_by_uuid,
             commands::blocks::delete_block,
+            commands::blocks::delete_block_by_uuid,
             commands::blocks::get_page_blocks,
+            commands::blocks::get_block_children,
+            commands::blocks::get_block_descendants,
             commands::blocks::reorder_block,
             commands::blocks::move_block,
+            commands::blocks::indent_block,
+            commands::blocks::outdent_block,
+            commands::blocks::create_sibling_block,
+            commands::blocks::create_child_block,
+            commands::blocks::duplicate_block,
+            commands::blocks::get_block_context,
+            
+            // Block properties commands
+            commands::blocks::get_block_properties,
+            commands::blocks::set_block_property,
+            commands::blocks::delete_block_property,
             
             // Content processing commands
             commands::content::parse_markdown,
@@ -142,12 +158,17 @@ async fn initialize_app_state(app_handle: &tauri::AppHandle) -> Result<AppState>
     AppState::new(data_dir).await
 }
 
-/// Get platform-specific application data directory
-fn get_app_data_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf> {
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| anyhow::anyhow!("Failed to get app data directory: {}", e))?;
+/// Get application data directory in the same folder as the executable
+fn get_app_data_dir(_app_handle: &tauri::AppHandle) -> Result<PathBuf> {
+    // Get the directory where the executable is located
+    let exe_dir = std::env::current_exe()
+        .map_err(|e| anyhow::anyhow!("Failed to get executable path: {}", e))?
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get executable parent directory"))?
+        .to_path_buf();
+    
+    // Create data folder in the same directory as executable
+    let app_data_dir = exe_dir.join("data");
     
     Ok(app_data_dir)
 }

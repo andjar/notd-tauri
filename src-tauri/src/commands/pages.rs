@@ -5,7 +5,7 @@ use tauri::{AppHandle, Manager};
 use serde::{Serialize, Deserialize};
 
 use crate::{AppState, db::{Page, PageFilter}};
-use super::{CommandResponse, command_wrapper};
+use super::{CommandResponse};
 
 // ================================
 // Request/Response Types
@@ -40,9 +40,8 @@ pub async fn create_page(
     request: CreatePageRequest,
 ) -> Result<CommandResponse<Page>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.create_page(&request.title, &request.path)
-    ))
+    let result = state.database.lock().await.create_page(&request.title, &request.path).await;
+    Ok(result.into())
 }
 
 /// Get page by ID
@@ -52,9 +51,8 @@ pub async fn get_page(
     page_id: i32,
 ) -> Result<CommandResponse<Option<Page>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_page(page_id)
-    ))
+    let result = state.database.lock().await.get_page(page_id).await;
+    Ok(result.into())
 }
 
 /// Get page by path
@@ -64,9 +62,8 @@ pub async fn get_page_by_path(
     path: String,
 ) -> Result<CommandResponse<Option<Page>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_page_by_path(&path)
-    ))
+    let result = state.database.lock().await.get_page_by_path(&path).await;
+    Ok(result.into())
 }
 
 /// Update page
@@ -77,13 +74,12 @@ pub async fn update_page(
     request: UpdatePageRequest,
 ) -> Result<CommandResponse<()>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.update_page(
-            page_id,
-            request.title.as_deref(),
-            request.path.as_deref()
-        )
-    ))
+    let result = state.database.lock().await.update_page(
+        page_id,
+        request.title.as_deref(),
+        request.path.as_deref()
+    ).await;
+    Ok(result.into())
 }
 
 /// Delete page
@@ -93,9 +89,8 @@ pub async fn delete_page(
     page_id: i32,
 ) -> Result<CommandResponse<()>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.delete_page(page_id)
-    ))
+    let result = state.database.lock().await.delete_page(page_id).await;
+    Ok(result.into())
 }
 
 /// List pages with optional filtering
@@ -114,9 +109,8 @@ pub async fn list_pages(
         })
     });
     
-    Ok(command_wrapper!(
-        state.database.lock().await.list_pages(filter)
-    ))
+    let result = state.database.lock().await.list_pages(filter).await;
+    Ok(result.into())
 }
 
 /// Get or create daily page for specified date
@@ -126,9 +120,8 @@ pub async fn get_daily_page(
     date: String,
 ) -> Result<CommandResponse<Page>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_daily_page(&date)
-    ))
+    let result = state.database.lock().await.get_daily_page(&date).await;
+    Ok(result.into())
 }
 
 /// Get today's daily page
@@ -138,9 +131,8 @@ pub async fn get_today_page(
 ) -> Result<CommandResponse<Page>, ()> {
     let state = app.state::<AppState>();
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_daily_page(&today)
-    ))
+    let result = state.database.lock().await.get_daily_page(&today).await;
+    Ok(result.into())
 }
 
 /// Get page ancestors (for breadcrumb navigation)
@@ -150,9 +142,8 @@ pub async fn get_page_ancestors(
     path: String,
 ) -> Result<CommandResponse<Vec<Page>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_page_ancestors(&path)
-    ))
+    let result = state.database.lock().await.get_page_ancestors(&path).await;
+    Ok(result.into())
 }
 
 /// Get page children (for tree navigation)
@@ -162,9 +153,8 @@ pub async fn get_page_children(
     path: String,
 ) -> Result<CommandResponse<Vec<Page>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_page_children(&path)
-    ))
+    let result = state.database.lock().await.get_page_children(&path).await;
+    Ok(result.into())
 }
 
 /// Search pages by title or path
@@ -175,9 +165,8 @@ pub async fn search_pages(
     limit: Option<usize>,
 ) -> Result<CommandResponse<Vec<Page>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.search_pages(&query, limit)
-    ))
+    let result = state.database.lock().await.search_pages(&query, limit).await;
+    Ok(result.into())
 }
 
 // ================================
@@ -215,17 +204,16 @@ pub async fn get_recent_pages(
     limit: Option<usize>,
 ) -> Result<CommandResponse<Vec<Page>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.list_pages(None)
-            .map(|mut pages| {
-                // Sort by updated_at and limit
-                pages.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-                if let Some(limit) = limit {
-                    pages.truncate(limit);
-                }
-                pages
-            })
-    ))
+    let result = state.database.lock().await.list_pages(None).await;
+    let mapped_result = result.map(|mut pages| {
+        // Sort by updated_at and limit
+        pages.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        if let Some(limit) = limit {
+            pages.truncate(limit);
+        }
+        pages
+    });
+    Ok(mapped_result.into())
 }
 
 // ================================

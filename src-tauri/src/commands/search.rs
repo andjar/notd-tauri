@@ -5,7 +5,7 @@ use tauri::{AppHandle, Manager};
 use serde::{Serialize, Deserialize};
 
 use crate::{AppState, db::{Block, search::{SearchResult, GlobalSearchResults, BacklinkResult, ContextualBacklink}}};
-use super::{CommandResponse, command_wrapper};
+use super::{CommandResponse};
 
 // ================================
 // Request Types
@@ -34,9 +34,8 @@ pub async fn search_blocks(
     request: SearchRequest,
 ) -> Result<CommandResponse<Vec<SearchResult>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.search_blocks(&request.query, request.limit)
-    ))
+    let result = state.database.lock().await.search_blocks(&request.query, request.limit).await;
+    Ok(result.into())
 }
 
 /// Global search across pages and blocks
@@ -46,9 +45,8 @@ pub async fn global_search(
     request: SearchRequest,
 ) -> Result<CommandResponse<GlobalSearchResults>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.global_search(&request.query, request.limit)
-    ))
+    let result = state.database.lock().await.global_search(&request.query, request.limit).await;
+    Ok(result.into())
 }
 
 /// Quick search with limited results (for autocomplete/suggestions)
@@ -87,9 +85,8 @@ pub async fn get_page_backlinks(
     page_id: i32,
 ) -> Result<CommandResponse<Vec<BacklinkResult>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_page_backlinks(page_id)
-    ))
+    let result = state.database.lock().await.get_page_backlinks(page_id).await;
+    Ok(result.into())
 }
 
 /// Get contextual backlinks (with full hierarchy)
@@ -99,9 +96,8 @@ pub async fn get_contextual_backlinks(
     page_id: i32,
 ) -> Result<CommandResponse<Vec<ContextualBacklink>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_contextual_backlinks(page_id)
-    ))
+    let result = state.database.lock().await.get_contextual_backlinks(page_id).await;
+    Ok(result.into())
 }
 
 // ================================
@@ -115,9 +111,8 @@ pub async fn search_blocks_by_property(
     request: PropertySearchRequest,
 ) -> Result<CommandResponse<Vec<Block>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.find_blocks_by_property(&request.key, request.value.as_deref())
-    ))
+    let result = state.database.lock().await.find_blocks_by_property(&request.key, request.value.as_deref()).await;
+    Ok(result.into())
 }
 
 /// Get all unique property keys
@@ -126,9 +121,8 @@ pub async fn get_property_keys(
     app: AppHandle,
 ) -> Result<CommandResponse<Vec<String>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_all_property_keys()
-    ))
+    let result = state.database.lock().await.get_all_property_keys().await;
+    Ok(result.into())
 }
 
 /// Find blocks with specific tag (convenience function for tag property)
@@ -138,9 +132,8 @@ pub async fn search_blocks_by_tag(
     tag: String,
 ) -> Result<CommandResponse<Vec<Block>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.find_blocks_by_property("_tags", Some(&tag))
-    ))
+    let result = state.database.lock().await.find_blocks_by_property("_tags", Some(&tag)).await;
+    Ok(result.into())
 }
 
 // ================================
@@ -154,9 +147,8 @@ pub async fn get_recent_blocks(
     limit: Option<usize>,
 ) -> Result<CommandResponse<Vec<Block>>, ()> {
     let state = app.state::<AppState>();
-    Ok(command_wrapper!(
-        state.database.lock().await.get_recent_blocks(limit)
-    ))
+    let result = state.database.lock().await.get_recent_blocks(limit).await;
+    Ok(result.into())
 }
 
 /// Get blocks by task status
@@ -169,18 +161,17 @@ pub async fn search_tasks(
     let state = app.state::<AppState>();
     // Search for blocks by task status using property search
     let key = "_task_status";
-    Ok(command_wrapper!(
-        state.database.lock().await.find_blocks_by_property(key, status.as_deref())
-            .map(|mut blocks| {
-                // Filter to only actual task blocks
-                blocks.retain(|b| b.is_task());
-                // Apply limit
-                if let Some(limit) = limit {
-                    blocks.truncate(limit);
-                }
-                blocks
-            })
-    ))
+    let result = state.database.lock().await.find_blocks_by_property(key, status.as_deref()).await;
+    let mapped_result = result.map(|mut blocks| {
+        // Filter to only actual task blocks
+        blocks.retain(|b| b.is_task());
+        // Apply limit
+        if let Some(limit) = limit {
+            blocks.truncate(limit);
+        }
+        blocks
+    });
+    Ok(mapped_result.into())
 }
 
 /// Get blocks by due date (tasks with due dates)
@@ -205,14 +196,13 @@ pub async fn search_tasks_by_due_date(
         date => date.to_string(),
     };
     
-    Ok(command_wrapper!(
-        state.database.lock().await.find_blocks_by_property("due", Some(&date_condition))
-            .map(|mut blocks| {
-                // Filter to only task blocks
-                blocks.retain(|b| b.is_task());
-                blocks
-            })
-    ))
+    let result = state.database.lock().await.find_blocks_by_property("due", Some(&date_condition)).await;
+    let mapped_result = result.map(|mut blocks| {
+        // Filter to only task blocks
+        blocks.retain(|b| b.is_task());
+        blocks
+    });
+    Ok(mapped_result.into())
 }
 
 // ================================
@@ -251,7 +241,7 @@ pub async fn advanced_search(
     // Apply property filters
     for property_filter in criteria.property_filters {
         results.filters_applied.push(format!("{}:{}", property_filter.key, 
-            property_filter.value.unwrap_or_else(|| "*".to_string())));
+            property_filter.value.clone().unwrap_or_else(|| "*".to_string())));
             
         let matching_blocks = match db.find_blocks_by_property(
             &property_filter.key, 

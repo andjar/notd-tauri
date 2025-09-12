@@ -47,7 +47,7 @@ fn convert_page_links(html: String) -> String {
     link_regex.replace_all(&html, |caps: &regex::Captures| {
         let page_name = &caps[1];
         format!(
-            r#"<a href="#" class="page-link" data-page="{}">{}</a>"#,
+            r#"<a href='#' class='page-link' data-page='{}'>{}</a>"#,
             page_name, page_name
         )
     }).to_string()
@@ -169,8 +169,8 @@ mod tests {
         let content = "See [[Page Name]] for details.";
         let html = parse_to_html(content);
         
-        assert!(html.contains(r#"<a href="#" class="page-link""#));
-        assert!(html.contains(r#"data-page="Page Name""#));
+        assert!(html.contains(r#"<a href='#' class='page-link'"#));
+        assert!(html.contains(r#"data-page='Page Name'"#));
     }
     
     #[test]

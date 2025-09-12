@@ -1,12 +1,12 @@
 // Block Database Operations
 // Phase 1: CRUD operations for block management and hierarchy
 
-use rusqlite::{params, OptionalExtension, Result as SqlResult};
-use chrono::{DateTime, Utc};
-use anyhow::Result;
+use rusqlite::{params, OptionalExtension};
+use chrono::Utc;
+
 use std::collections::HashMap;
 
-use super::{Database, Block, BlockHierarchy, BlockProperty, PropertyType, DbResult, ORDER_GAP, ordering};
+use super::{Database, Block, BlockHierarchy, BlockProperty, PropertyType, DbResult, ordering};
 use crate::AppError;
 
 impl Database {
@@ -194,7 +194,7 @@ impl Database {
     }
     
     /// Get flat list of all blocks for a page, ordered by hierarchy
-    async fn get_page_blocks_flat(&self, page_id: i32) -> DbResult<Vec<Block>> {
+    pub async fn get_page_blocks_flat(&self, page_id: i32) -> DbResult<Vec<Block>> {
         let conn = self.conn().await;
         let mut stmt = conn.prepare(
             r#"
@@ -246,10 +246,9 @@ impl Database {
         }
         
         // Second pass: build parent-child relationships
-        let mut blocks_to_process: Vec<_> = block_map.into_iter().collect();
-        blocks_to_process.sort_by(|a, b| a.0.cmp(&b.0)); // Process in ID order for consistency
+        let blocks_to_process: Vec<_> = block_map.into_iter().collect();
         
-        for (block_id, mut hierarchy) in blocks_to_process {
+        for (block_id, hierarchy) in blocks_to_process {
             if let Some(parent_id) = hierarchy.block.parent_id {
                 // Find parent and add this as child
                 if let Some(parent) = self.find_parent_in_hierarchy(&mut roots, parent_id) {
@@ -566,10 +565,11 @@ impl Database {
             )?
         };
         
-        let mut rows = if let Some(pid) = parent_id {
-            stmt.query_map(params![page_id, pid], |row| row.get(0))
+        let map_row = |row: &rusqlite::Row<'_>| row.get(0);
+        let rows = if let Some(pid) = parent_id {
+            stmt.query_map(params![page_id, pid], map_row)
         } else {
-            stmt.query_map(params![page_id], |row| row.get(0))
+            stmt.query_map(params![page_id], map_row)
         }?;
         
         let mut orders = Vec::new();
@@ -581,7 +581,7 @@ impl Database {
     }
     
     /// Get all sibling blocks (same parent and page)
-    async fn get_sibling_blocks(&self, page_id: i32, parent_id: Option<i32>) -> DbResult<Vec<Block>> {
+    pub async fn get_sibling_blocks(&self, page_id: i32, parent_id: Option<i32>) -> DbResult<Vec<Block>> {
         let conn = self.conn().await;
         let mut stmt = if parent_id.is_some() {
             conn.prepare(

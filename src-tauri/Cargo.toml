@@ -8,10 +8,6 @@ repository = "https://github.com/outliner/outliner"
 default-run = "outliner"
 edition = "2021"
 
-# Prevent additional console window on Windows in release mode
-[target.'cfg(not(debug_assertions))'.windows.subsystem]
-name = "windows"
-
 [build-dependencies]
 tauri-build = { version = "2.0.0-beta.0", features = [] }
 

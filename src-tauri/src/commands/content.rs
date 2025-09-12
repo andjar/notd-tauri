@@ -5,7 +5,7 @@ use tauri::{AppHandle, Manager};
 use serde::{Serialize, Deserialize};
 
 use crate::{AppState, parser};
-use super::{CommandResponse, command_wrapper};
+use super::CommandResponse;
 
 // ================================
 // Request/Response Types
@@ -105,7 +105,7 @@ pub async fn validate_content(
     content: String,
 ) -> Result<CommandResponse<ContentValidationResult>, ()> {
     let mut warnings = Vec::new();
-    let mut errors = Vec::new();
+    let errors = Vec::new();
     
     // Check for malformed links
     let malformed_links = parser::links::find_malformed_links(&content);

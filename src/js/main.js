@@ -5,6 +5,7 @@ import OutlinerManager from './outliner.js';
 import CalendarComponent from './components/calendar.js';
 import SearchComponent from './components/search.js';
 import SidebarComponent from './components/sidebar.js';
+import { invoke } from '@tauri-apps/api/core';
 
 class OutlinerApp {
     constructor() {
@@ -26,14 +27,8 @@ class OutlinerApp {
             // Show loading overlay
             this.showLoading();
             
-            // Initialize Tauri API
-            if (!window.__TAURI__) {
-                console.error('Tauri API is not available. The application cannot function.');
-                this.showError('Fatal Error: Tauri API not found. Please run this application in the Tauri environment.');
-                return;
-            }
-            this.tauri = window.__TAURI__;
-            console.log('Tauri API available');
+            // Initialize Tauri API (v2 via @tauri-apps/api)
+            console.log('Using Tauri v2 JS API');
             
             // Initialize UI components
             this.initUI();
@@ -51,6 +46,7 @@ class OutlinerApp {
             
         } catch (error) {
             console.error('Failed to initialize application:', error);
+            this.hideLoading();
             this.showError('Failed to initialize application: ' + error.message);
         }
     }
@@ -189,13 +185,8 @@ class OutlinerApp {
     // ================================
     
     async invokeCommand(command, args = {}) {
-        if (!this.tauri || !this.tauri.invoke) {
-            console.error(`Tauri API not available. Cannot invoke command: ${command}`);
-            this.showError(`Cannot invoke command: ${command}. Tauri API is not available.`);
-            throw new Error('Tauri API not available');
-        }
         try {
-            const result = await this.tauri.invoke(command, args);
+            const result = await invoke(command, args);
             return result;
         } catch (error) {
             console.error(`Command ${command} failed:`, error);
@@ -330,9 +321,16 @@ class OutlinerApp {
         
         // Attach listeners to block bullets for drag & drop
         document.querySelectorAll('.block-bullet').forEach(bullet => {
+            console.log('🎯 Attaching drag listeners to bullet:', bullet);
             bullet.addEventListener('dragstart', (e) => this.handleBlockDragStart(e));
             bullet.addEventListener('dragover', (e) => this.handleBlockDragOver(e));
             bullet.addEventListener('drop', (e) => this.handleBlockDrop(e));
+            bullet.addEventListener('contextmenu', (e) => this.handleBlockContextMenu(e));
+        });
+        
+        // Attach context menu listeners to blocks
+        document.querySelectorAll('.block-item').forEach(blockItem => {
+            blockItem.addEventListener('contextmenu', (e) => this.handleBlockContextMenu(e));
         });
     }
     
@@ -341,32 +339,39 @@ class OutlinerApp {
     }
     
     async handleBlockBlur(contentElement) {
-        this.outliner.handleBlockBlur(contentElement);
+        await this.outliner.handleBlockBlur(contentElement);
     }
     
     handleBlockInput(contentElement) {
         this.blockEditor.handleContentInput(contentElement);
+        console.log('🔍 Block input detected, scheduling save');
     }
     
     async handleBlockKeydown(e) {
         const contentElement = e.target;
         const blockElement = contentElement.closest('.block-item');
         
+        console.log('⌨️ Key pressed:', e.key, 'Block ID:', blockElement?.dataset?.blockId);
+        
         switch (e.key) {
             case 'Enter':
+                e.preventDefault(); // Always prevent default Enter behavior
+                
                 if (e.ctrlKey || e.metaKey) {
                     // Ctrl+Enter: Create child block
-                    e.preventDefault();
+                    console.log('📋 Creating child block');
                     await this.blockEditor.createChildBlock(blockElement);
                 } else {
                     // Enter: Create sibling block
-                    e.preventDefault();
+                    console.log('📄 Creating sibling block');
                     await this.blockEditor.createSiblingBlock(blockElement);
                 }
                 break;
                 
             case 'Tab':
                 e.preventDefault();
+                console.log('⭾ Tab key - Indenting:', !e.shiftKey ? 'indent' : 'outdent');
+                
                 if (e.shiftKey) {
                     // Shift+Tab: Outdent
                     await this.blockEditor.outdentBlock(blockElement);
@@ -378,6 +383,7 @@ class OutlinerApp {
                 
             case 'Backspace':
                 if (contentElement.textContent === '' && e.target.selectionStart === 0) {
+                    console.log('🗑️ Deleting empty block');
                     e.preventDefault();
                     await this.blockEditor.deleteOrPromoteBlock(blockElement);
                 }
@@ -680,7 +686,7 @@ class OutlinerApp {
         }
         
         try {
-            const response = await this.invokeCommand('create_page', { title, path });
+            const response = await this.invokeCommand('create_page', { request: { title, path } });
             
             if (response.success) {
                 this.hideNewPageModal();
@@ -736,6 +742,139 @@ class OutlinerApp {
     
     handleBlockDrop(e) { 
         this.outliner.handleDrop(e);
+    }
+    
+    handleBlockContextMenu(e) {
+        e.preventDefault();
+        console.log('🖱️ Right-click context menu triggered', e);
+        
+        const blockElement = e.target.closest('.block-item');
+        if (!blockElement) return;
+        
+        const blockId = blockElement.dataset.blockId;
+        this.showBlockContextMenu(e.clientX, e.clientY, blockId);
+    }
+    
+    showBlockContextMenu(x, y, blockId) {
+        // Create context menu if it doesn't exist
+        let contextMenu = document.getElementById('block-context-menu');
+        if (!contextMenu) {
+            contextMenu = this.createBlockContextMenu();
+        }
+        
+        // Update menu items based on current block
+        this.updateContextMenuItems(contextMenu, blockId);
+        
+        // Position and show menu
+        contextMenu.style.left = x + 'px';
+        contextMenu.style.top = y + 'px';
+        contextMenu.style.display = 'block';
+        
+        // Hide menu when clicking elsewhere
+        const hideMenu = (e) => {
+            if (!contextMenu.contains(e.target)) {
+                contextMenu.style.display = 'none';
+                document.removeEventListener('click', hideMenu);
+            }
+        };
+        setTimeout(() => document.addEventListener('click', hideMenu), 0);
+    }
+    
+    createBlockContextMenu() {
+        const menu = document.createElement('div');
+        menu.id = 'block-context-menu';
+        menu.className = 'context-menu';
+        menu.innerHTML = `
+            <div class="context-menu-item" data-action="indent">
+                <span class="icon">→</span>
+                <span>Indent Block</span>
+                <span class="shortcut">Tab</span>
+            </div>
+            <div class="context-menu-item" data-action="outdent">
+                <span class="icon">←</span>
+                <span>Outdent Block</span>
+                <span class="shortcut">Shift+Tab</span>
+            </div>
+            <div class="context-menu-separator"></div>
+            <div class="context-menu-item" data-action="new-sibling">
+                <span class="icon">+</span>
+                <span>New Sibling Block</span>
+                <span class="shortcut">Enter</span>
+            </div>
+            <div class="context-menu-item" data-action="new-child">
+                <span class="icon">↪</span>
+                <span>New Child Block</span>
+                <span class="shortcut">Ctrl+Enter</span>
+            </div>
+            <div class="context-menu-separator"></div>
+            <div class="context-menu-item" data-action="duplicate">
+                <span class="icon">⧉</span>
+                <span>Duplicate Block</span>
+            </div>
+            <div class="context-menu-item" data-action="delete" class="danger">
+                <span class="icon">🗑</span>
+                <span>Delete Block</span>
+                <span class="shortcut">Del</span>
+            </div>
+        `;
+        
+        // Add event listeners to menu items
+        menu.addEventListener('click', (e) => {
+            const action = e.target.closest('.context-menu-item')?.dataset.action;
+            if (action) {
+                this.handleContextMenuAction(action, this.selectedBlock);
+                menu.style.display = 'none';
+            }
+        });
+        
+        document.body.appendChild(menu);
+        return menu;
+    }
+    
+    updateContextMenuItems(menu, blockId) {
+        // Enable/disable items based on context
+        this.selectedBlock = blockId;
+    }
+    
+    async handleContextMenuAction(action, blockId) {
+        const blockElement = document.querySelector(`[data-block-id="${blockId}"]`);
+        if (!blockElement) return;
+        
+        switch (action) {
+            case 'indent':
+                await this.blockEditor.indentBlock(blockElement);
+                break;
+            case 'outdent':
+                await this.blockEditor.outdentBlock(blockElement);
+                break;
+            case 'new-sibling':
+                await this.blockEditor.createSiblingBlock(blockElement);
+                break;
+            case 'new-child':
+                await this.blockEditor.createChildBlock(blockElement);
+                break;
+            case 'duplicate':
+                await this.duplicateBlock(blockId);
+                break;
+            case 'delete':
+                await this.blockEditor.deleteOrPromoteBlock(blockElement);
+                break;
+        }
+    }
+    
+    async duplicateBlock(blockId) {
+        try {
+            const response = await this.invokeCommand('duplicate_block', { block_id: parseInt(blockId) });
+            if (response.success) {
+                await this.loadPageBlocks(this.currentPage.id);
+                this.renderBlocks();
+            } else {
+                this.showError('Failed to duplicate block: ' + response.error);
+            }
+        } catch (error) {
+            console.error('Failed to duplicate block:', error);
+            this.showError('Failed to duplicate block: ' + error.message);
+        }
     }
     
     // Calendar rendering

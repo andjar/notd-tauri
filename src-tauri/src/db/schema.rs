@@ -9,10 +9,6 @@ pub const CURRENT_SCHEMA_VERSION: i32 = 1;
 
 /// Initialize database schema and run migrations
 pub fn initialize_schema(conn: &Connection) -> Result<()> {
-    // Enable foreign key constraints and WAL mode
-    conn.execute("PRAGMA foreign_keys = ON", [])?;
-    conn.execute("PRAGMA journal_mode = WAL", [])?;
-    
     // Create or update schema
     let current_version = get_schema_version(conn)?;
     
@@ -32,7 +28,7 @@ fn create_initial_schema(conn: &Connection) -> SqlResult<()> {
     // Create pages table - organizational containers for blocks
     conn.execute(
         r#"
-        CREATE TABLE pages (
+        CREATE TABLE IF NOT EXISTS pages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL UNIQUE,
             path TEXT NOT NULL UNIQUE,
@@ -46,7 +42,7 @@ fn create_initial_schema(conn: &Connection) -> SqlResult<()> {
     // Create blocks table - fundamental content units
     conn.execute(
         r#"
-        CREATE TABLE blocks (
+        CREATE TABLE IF NOT EXISTS blocks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             uuid TEXT NOT NULL UNIQUE,
             page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
@@ -65,7 +61,7 @@ fn create_initial_schema(conn: &Connection) -> SqlResult<()> {
     // Create block properties table - flexible key-value metadata
     conn.execute(
         r#"
-        CREATE TABLE block_properties (
+        CREATE TABLE IF NOT EXISTS block_properties (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             block_id INTEGER NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
             key TEXT NOT NULL,
@@ -80,7 +76,7 @@ fn create_initial_schema(conn: &Connection) -> SqlResult<()> {
     // Create links table - connects blocks to pages
     conn.execute(
         r#"
-        CREATE TABLE links (
+        CREATE TABLE IF NOT EXISTS links (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             source_block_id INTEGER NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
             target_page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
@@ -94,7 +90,7 @@ fn create_initial_schema(conn: &Connection) -> SqlResult<()> {
     // Create tasks table - indexed view of task blocks
     conn.execute(
         r#"
-        CREATE TABLE tasks (
+        CREATE TABLE IF NOT EXISTS tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             block_id INTEGER NOT NULL UNIQUE REFERENCES blocks(id) ON DELETE CASCADE,
             status TEXT NOT NULL DEFAULT 'TODO',
@@ -111,7 +107,7 @@ fn create_initial_schema(conn: &Connection) -> SqlResult<()> {
     // Create task state changes table - time tracking for tasks
     conn.execute(
         r#"
-        CREATE TABLE task_state_changes (
+        CREATE TABLE IF NOT EXISTS task_state_changes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
             old_status TEXT,
@@ -125,7 +121,7 @@ fn create_initial_schema(conn: &Connection) -> SqlResult<()> {
     // Create attachments table - file attachments linked to pages
     conn.execute(
         r#"
-        CREATE TABLE attachments (
+        CREATE TABLE IF NOT EXISTS attachments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
             filename TEXT NOT NULL,
@@ -141,7 +137,7 @@ fn create_initial_schema(conn: &Connection) -> SqlResult<()> {
     // Create full-text search virtual table
     conn.execute(
         r#"
-        CREATE VIRTUAL TABLE blocks_fts USING fts5(
+        CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(
             content,
             content='blocks',
             content_rowid='id'
@@ -165,34 +161,34 @@ fn create_initial_schema(conn: &Connection) -> SqlResult<()> {
 /// Create performance-critical database indexes
 fn create_indexes(conn: &Connection) -> SqlResult<()> {
     // Primary lookup indexes
-    conn.execute("CREATE INDEX idx_blocks_parent ON blocks(parent_id)", [])?;
-    conn.execute("CREATE INDEX idx_blocks_page ON blocks(page_id)", [])?;
-    conn.execute("CREATE INDEX idx_blocks_uuid ON blocks(uuid)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_blocks_parent ON blocks(parent_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_blocks_page ON blocks(page_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_blocks_uuid ON blocks(uuid)", [])?;
     
     // Ordering and hierarchy indexes
-    conn.execute("CREATE INDEX idx_blocks_page_order ON blocks(page_id, parent_id, \"order\")", [])?;
-    conn.execute("CREATE INDEX idx_blocks_parent_order ON blocks(parent_id, \"order\") WHERE parent_id IS NOT NULL", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_blocks_page_order ON blocks(page_id, parent_id, \"order\")", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_blocks_parent_order ON blocks(parent_id, \"order\") WHERE parent_id IS NOT NULL", [])?;
     
     // Page navigation indexes
-    conn.execute("CREATE INDEX idx_pages_path ON pages(path)", [])?;
-    conn.execute("CREATE INDEX idx_pages_title ON pages(title)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pages_path ON pages(path)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pages_title ON pages(title)", [])?;
     
     // Task management indexes
-    conn.execute("CREATE INDEX idx_tasks_status ON tasks(status)", [])?;
-    conn.execute("CREATE INDEX idx_tasks_due_date ON tasks(due_date) WHERE due_date IS NOT NULL", [])?;
-    conn.execute("CREATE INDEX idx_tasks_priority ON tasks(priority) WHERE priority IS NOT NULL", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date) WHERE due_date IS NOT NULL", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority) WHERE priority IS NOT NULL", [])?;
     
     // Link and backlink indexes
-    conn.execute("CREATE INDEX idx_links_source ON links(source_block_id)", [])?;
-    conn.execute("CREATE INDEX idx_links_target ON links(target_page_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_links_source ON links(source_block_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_page_id)", [])?;
     
     // Property lookup indexes
-    conn.execute("CREATE INDEX idx_block_properties_key ON block_properties(key)", [])?;
-    conn.execute("CREATE INDEX idx_block_properties_block ON block_properties(block_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_block_properties_key ON block_properties(key)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_block_properties_block ON block_properties(block_id)", [])?;
     
     // Timestamp indexes for performance queries
-    conn.execute("CREATE INDEX idx_blocks_updated ON blocks(updated_at)", [])?;
-    conn.execute("CREATE INDEX idx_pages_updated ON pages(updated_at)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_blocks_updated ON blocks(updated_at)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pages_updated ON pages(updated_at)", [])?;
     
     Ok(())
 }
@@ -202,7 +198,7 @@ fn create_triggers(conn: &Connection) -> SqlResult<()> {
     // Trigger to update page updated_at when blocks are modified
     conn.execute(
         r#"
-        CREATE TRIGGER update_page_timestamp
+        CREATE TRIGGER IF NOT EXISTS update_page_timestamp
         AFTER UPDATE ON blocks
         BEGIN
             UPDATE pages 
@@ -216,7 +212,7 @@ fn create_triggers(conn: &Connection) -> SqlResult<()> {
     // Trigger to maintain FTS index when blocks are inserted
     conn.execute(
         r#"
-        CREATE TRIGGER blocks_fts_insert
+        CREATE TRIGGER IF NOT EXISTS blocks_fts_insert
         AFTER INSERT ON blocks
         BEGIN
             INSERT INTO blocks_fts(rowid, content) VALUES (NEW.id, NEW.content);
@@ -228,7 +224,7 @@ fn create_triggers(conn: &Connection) -> SqlResult<()> {
     // Trigger to maintain FTS index when blocks are updated
     conn.execute(
         r#"
-        CREATE TRIGGER blocks_fts_update
+        CREATE TRIGGER IF NOT EXISTS blocks_fts_update
         AFTER UPDATE ON blocks
         BEGIN
             UPDATE blocks_fts SET content = NEW.content WHERE rowid = NEW.id;
@@ -240,7 +236,7 @@ fn create_triggers(conn: &Connection) -> SqlResult<()> {
     // Trigger to maintain FTS index when blocks are deleted
     conn.execute(
         r#"
-        CREATE TRIGGER blocks_fts_delete
+        CREATE TRIGGER IF NOT EXISTS blocks_fts_delete
         AFTER DELETE ON blocks
         BEGIN
             DELETE FROM blocks_fts WHERE rowid = OLD.id;
@@ -252,7 +248,7 @@ fn create_triggers(conn: &Connection) -> SqlResult<()> {
     // Trigger to automatically create/update task entries for task blocks
     conn.execute(
         r#"
-        CREATE TRIGGER maintain_task_entries
+        CREATE TRIGGER IF NOT EXISTS maintain_task_entries
         AFTER INSERT ON blocks
         WHEN (
             LOWER(TRIM(NEW.content)) LIKE 'todo %' OR
@@ -283,7 +279,7 @@ fn create_triggers(conn: &Connection) -> SqlResult<()> {
     // Trigger to update task entries when blocks are updated
     conn.execute(
         r#"
-        CREATE TRIGGER update_task_entries
+        CREATE TRIGGER IF NOT EXISTS update_task_entries
         AFTER UPDATE ON blocks
         WHEN (
             LOWER(TRIM(NEW.content)) LIKE 'todo %' OR
@@ -340,69 +336,99 @@ fn create_triggers(conn: &Connection) -> SqlResult<()> {
 
 /// Create initial system data (templates, settings, etc.)
 fn create_initial_data(conn: &Connection) -> SqlResult<()> {
+    // If any pages already exist, assume initial data has been created and skip
+    let existing_pages: i64 = conn
+        .prepare("SELECT COUNT(*) FROM pages")?
+        .query_row([], |row| row.get(0))?;
+    if existing_pages > 0 {
+        return Ok(());
+    }
     // Create system template pages
     conn.execute(
         "INSERT INTO pages (title, path) VALUES (?, ?)",
         ["Block Templates", "_templates/blocks"],
     )?;
-    
+    let block_template_page_id = conn.last_insert_rowid();
+
     conn.execute(
         "INSERT INTO pages (title, path) VALUES (?, ?)",
         ["Daily Template", "_templates/daily-note"],
     )?;
-    
+
     conn.execute(
         "INSERT INTO pages (title, path) VALUES (?, ?)",
         ["Meeting Template", "_templates/meeting"],
     )?;
-    
+
     // Create system settings pages
     conn.execute(
         "INSERT INTO pages (title, path) VALUES (?, ?)",
         ["Configuration", "_settings/config"],
     )?;
-    
+
     conn.execute(
         "INSERT INTO pages (title, path) VALUES (?, ?)",
         ["Theme Settings", "_settings/theme"],
     )?;
-    
+
     // Create default templates with initial blocks
-    let block_template_page_id = conn.last_insert_rowid() as i32 - 1; // _templates/blocks
-    
-    // Add some default block templates
     conn.execute(
         "INSERT INTO blocks (uuid, page_id, parent_id, \"order\", content) VALUES (?, ?, ?, ?, ?)",
-        [&uuid::Uuid::new_v4().to_string(), &block_template_page_id.to_string(), "", "1000", "Meeting Notes"],
+        rusqlite::params![
+            &uuid::Uuid::new_v4().to_string(),
+            block_template_page_id,
+            None::<i64>,
+            1000,
+            "Meeting Notes"
+        ],
     )?;
-    
-    let meeting_template_block_id = conn.last_insert_rowid() as i32;
-    
+
+    let meeting_template_block_id = conn.last_insert_rowid();
+
     // Add child blocks for meeting template
     conn.execute(
         "INSERT INTO blocks (uuid, page_id, parent_id, \"order\", content) VALUES (?, ?, ?, ?, ?)",
-        [&uuid::Uuid::new_v4().to_string(), &block_template_page_id.to_string(), &meeting_template_block_id.to_string(), "1000", "## Attendees"],
+        rusqlite::params![
+            &uuid::Uuid::new_v4().to_string(),
+            block_template_page_id,
+            meeting_template_block_id,
+            1000,
+            "## Attendees"
+        ],
     )?;
-    
+
     conn.execute(
         "INSERT INTO blocks (uuid, page_id, parent_id, \"order\", content) VALUES (?, ?, ?, ?, ?)",
-        [&uuid::Uuid::new_v4().to_string(), &block_template_page_id.to_string(), &meeting_template_block_id.to_string(), "2000", "## Agenda"],
+        rusqlite::params![
+            &uuid::Uuid::new_v4().to_string(),
+            block_template_page_id,
+            meeting_template_block_id,
+            2000,
+            "## Agenda"
+        ],
     )?;
-    
+
     conn.execute(
         "INSERT INTO blocks (uuid, page_id, parent_id, \"order\", content) VALUES (?, ?, ?, ?, ?)",
-        [&uuid::Uuid::new_v4().to_string(), &block_template_page_id.to_string(), &meeting_template_block_id.to_string(), "3000", "## Action Items"],
+        rusqlite::params![
+            &uuid::Uuid::new_v4().to_string(),
+            block_template_page_id,
+            meeting_template_block_id,
+            3000,
+            "## Action Items"
+        ],
     )?;
-    
+
     Ok(())
 }
 
 /// Get current schema version from database
 fn get_schema_version(conn: &Connection) -> Result<i32> {
     // Check if schema_version table exists
-    let table_exists: bool = conn
+    let table_exists_count: i64 = conn
         .prepare("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_version'")?
         .query_row([], |row| row.get(0))?;
+    let table_exists = table_exists_count > 0;
     
     if !table_exists {
         // Create schema_version table

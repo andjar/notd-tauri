@@ -231,8 +231,10 @@ class OutlinerManager {
             
             const response = await this.app.invokeCommand('move_block', {
                 block_id: blockId,
-                new_parent_id: targetBlockData.block.parent_id,
-                new_position: newPosition
+                request: {
+                    new_parent_id: targetBlockData.block.parent_id,
+                    new_position: newPosition
+                }
             });
 
             if (response.success) {
@@ -345,15 +347,38 @@ class OutlinerManager {
         this.updateCurrentBlockPath(blockElement);
     }
 
-    handleBlockBlur(contentElement) {
+    async handleBlockBlur(contentElement) {
         const blockElement = contentElement.closest('.block-item');
-        const blockId = parseInt(blockElement.dataset.blockId);
+        const blockIdRaw = blockElement.dataset.blockId;
+        const blockId = parseInt(blockIdRaw);
+        
+        console.log('👁️ Block blur event - Block ID:', blockIdRaw, 'Parsed:', blockId);
         
         blockElement.classList.remove('editing');
         
-        // Save content
+        // Save content (await to ensure it completes)
         const content = contentElement.textContent || '';
-        this.app.blockEditor.saveBlockContent(blockId, content);
+        console.log('💾 Saving on blur - Block ID:', blockIdRaw, 'Content:', content);
+        
+        if (blockIdRaw === 'new') {
+            // Handle new block creation
+            if (content.trim()) {
+                console.log('📝 Creating new block from "new" block with content:', content);
+                const newBlock = await this.app.blockEditor.createNewBlock(null, null, content.trim());
+                if (newBlock) {
+                    console.log('✅ New block created successfully:', newBlock);
+                    // The block will be re-rendered with proper ID in createNewBlock
+                } else {
+                    console.error('❌ Failed to create new block');
+                }
+            } else {
+                console.log('🔄 Empty new block, leaving as is');
+            }
+        } else if (blockId && !isNaN(blockId)) {
+            await this.app.blockEditor.saveBlockContent(blockId, content);
+        } else {
+            console.warn('⚠️ Invalid block ID during blur, skipping save');
+        }
         
         this.app.editingBlock = null;
     }
@@ -418,9 +443,11 @@ class OutlinerManager {
         try {
             const response = await this.app.invokeCommand('set_block_property', {
                 block_id: blockId,
-                key: key,
-                value: value,
-                value_type: 'text'
+                request: {
+                    key: key,
+                    value: value,
+                    value_type: 'text'
+                }
             });
             
             if (!response.success) {

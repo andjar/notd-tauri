@@ -80,8 +80,10 @@ class SearchComponent {
         
         try {
             const response = await this.app.invokeCommand('global_search', {
-                query: query,
-                limit: 20
+                request: {
+                    query: query,
+                    limit: 20
+                }
             });
             
             if (response.success) {
@@ -327,7 +329,7 @@ class SearchComponent {
 
     async performAdvancedSearch(criteria) {
         try {
-            const response = await this.app.invokeCommand('advanced_search', criteria);
+            const response = await this.app.invokeCommand('advanced_search', { criteria });
             
             if (response.success) {
                 // TODO: Display advanced search results in dedicated interface
@@ -347,8 +349,10 @@ class SearchComponent {
     async searchByProperty(key, value = null) {
         try {
             const response = await this.app.invokeCommand('search_blocks_by_property', {
-                key: key,
-                value: value
+                request: {
+                    key: key,
+                    value: value
+                }
             });
             
             if (response.success) {

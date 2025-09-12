@@ -1,7 +1,7 @@
 // Database Layer - Core Data Operations
 // Phase 1: SQLite integration with block-centric schema
 
-use rusqlite::{Connection, Result as SqlResult, params, OptionalExtension};
+use rusqlite::Connection;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use std::path::Path;
@@ -15,9 +15,7 @@ pub mod pages;
 pub mod search;
 
 // Re-export core operations
-pub use blocks::*;
 pub use pages::*;
-pub use search::*;
 
 /// Core database manager with connection pooling and transaction support
 #[derive(Debug)]
@@ -33,7 +31,7 @@ impl Database {
         
         // Enable foreign key constraints
         connection.execute("PRAGMA foreign_keys = ON", [])?;
-        connection.execute("PRAGMA journal_mode = WAL", [])?;
+        connection.query_row("PRAGMA journal_mode = WAL", [], |_| Ok(()))?;
         
         // Initialize schema
         schema::initialize_schema(&connection)?;

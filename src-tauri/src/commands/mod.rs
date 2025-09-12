@@ -6,14 +6,8 @@ pub mod blocks;
 pub mod content;
 pub mod search;
 
-// Re-export command functions for easy access
-pub use pages::*;
-pub use blocks::*;
-pub use content::*;
-pub use search::*;
-
 use serde::{Serialize, Deserialize};
-use crate::{AppState, AppResult};
+use crate::AppResult;
 
 /// Standard response wrapper for Tauri commands
 #[derive(Debug, Serialize, Deserialize)]

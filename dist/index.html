@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Outliner</title>
-  <link rel="stylesheet" crossorigin href="/assets/index-DEd6c6X7.css">
+  <script type="module" crossorigin src="/assets/index-rgFHAbSA.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BG9C4vdf.css">
 </head>
 <body>
     <!-- Main Application Layout -->
@@ -20,11 +21,15 @@
             </div>
             
             <div class="title-bar-right">
-                <button class="title-bar-btn" id="toggle-edit-mode" title="Toggle Edit/Render Mode (Ctrl+E)">
-                    <span class="icon">✏️</span>
+                <button class="title-bar-btn" id="new-page-btn" title="New Page (Ctrl+N)">
+                    <span class="icon">📄</span>
                 </button>
-                <button class="title-bar-btn" id="minimize-btn" title="Minimize">−</button>
-                <button class="title-bar-btn close" id="close-btn" title="Close">×</button>
+                <button class="title-bar-btn" id="quick-open-btn" title="Quick Open (Ctrl+O)">
+                    <span class="icon">📂</span>
+                </button>
+                <button class="title-bar-btn" id="save-btn" title="Save (Ctrl+S)">
+                    <span class="icon">💾</span>
+                </button>
             </div>
         </div>
         
@@ -40,22 +45,6 @@
                 
                 <div class="sidebar-content">
                     
-                    <!-- Quick Navigation -->
-                    <div class="nav-section">
-                        <button class="nav-item active" id="nav-today">
-                            <span class="nav-icon">📅</span>
-                            <span class="nav-text">Today</span>
-                        </button>
-                        <button class="nav-item" id="nav-yesterday">
-                            <span class="nav-icon">⬅️</span>
-                            <span class="nav-text">Yesterday</span>
-                        </button>
-                        <button class="nav-item" id="nav-tomorrow">
-                            <span class="nav-icon">➡️</span>
-                            <span class="nav-text">Tomorrow</span>
-                        </button>
-                    </div>
-                    
                     <!-- Calendar Widget -->
                     <div class="nav-section">
                         <h4 class="section-title">Calendar</h4>
@@ -68,6 +57,15 @@
                             <div class="calendar-days" id="calendar-days">
                                 <!-- Calendar days will be populated by JavaScript -->
                             </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Navigation -->
+                    <div class="nav-section compact-nav">
+                        <div class="nav-row">
+                            <button class="nav-compact" id="nav-yesterday" title="Yesterday">‹</button>
+                            <button class="nav-compact active" id="nav-today" title="Today">Today</button>
+                            <button class="nav-compact" id="nav-tomorrow" title="Tomorrow">›</button>
                         </div>
                     </div>
                     
@@ -110,22 +108,7 @@
             
             <!-- Main Editor Area -->
             <div class="editor-area" id="editor-area">
-                <div class="editor-header">
-                    <div class="editor-actions">
-                        <button class="editor-btn" id="new-page-btn" title="New Page (Ctrl+N)">
-                            <span class="icon">📄</span>
-                            <span class="text">New Page</span>
-                        </button>
-                        <button class="editor-btn" id="quick-open-btn" title="Quick Open (Ctrl+O)">
-                            <span class="icon">📂</span>
-                            <span class="text">Open</span>
-                        </button>
-                        <button class="editor-btn" id="save-btn" title="Save (Ctrl+S)">
-                            <span class="icon">💾</span>
-                            <span class="text">Save</span>
-                        </button>
-                    </div>
-                </div>
+                <!-- Editor actions moved to top nav bar for cleaner design -->
                 
                 <div class="editor-content" id="editor-content">
                     <div class="page-header">
@@ -286,11 +269,5 @@
     </div>
     
     <!-- Scripts -->
-    <script src="js/editor.js"></script>
-    <script src="js/outliner.js"></script>
-    <script src="js/components/calendar.js"></script>
-    <script src="js/components/search.js"></script>
-    <script src="js/components/sidebar.js"></script>
-    <script src="js/main.js"></script>
 </body>
 </html>

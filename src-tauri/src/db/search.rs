@@ -1,14 +1,14 @@
 // Search and Query Operations
 // Phase 1: Full-text search and basic query functionality
 
-use rusqlite::{params, Result as SqlResult};
+use rusqlite::params;
 use serde::{Serialize, Deserialize};
-use anyhow::Result;
+
 use std::pin::Pin;
 use std::future::Future;
 
 use crate::AppError;
-use super::{Database, Block, Page, DbResult, BlockHierarchy};
+use super::{Database, Block, Page, DbResult};
 //use super::search_schema::{SearchDocument, SearchResult, GlobalSearchResults, BacklinkResult, ContextualBacklink};
 
 impl Database {
@@ -133,12 +133,13 @@ impl Database {
         
         let pages = self.search_pages(query, Some(page_limit)).await?;
         let blocks = self.search_blocks(query, Some(block_limit)).await?;
+        let total_results = pages.len() + blocks.len();
         
         Ok(GlobalSearchResults {
             pages,
             blocks,
             query: query.to_string(),
-            total_results: pages.len() + blocks.len(),
+            total_results,
         })
     }
     
@@ -212,7 +213,7 @@ impl Database {
     }
     
     /// Get block with children (recursive)
-    fn get_block_with_children(&self, block_id: i32) -> Pin<Box<dyn Future<Output = DbResult<super::BlockHierarchy>> + Send>> {
+    fn get_block_with_children(&self, block_id: i32) -> Pin<Box<dyn Future<Output = DbResult<super::BlockHierarchy>> + Send + '_>> {
         Box::pin(async move {
             // Get the block itself
             let block = self.get_block(block_id).await?

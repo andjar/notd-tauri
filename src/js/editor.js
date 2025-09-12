@@ -19,10 +19,12 @@ class BlockEditor {
 
         try {
             const response = await this.app.invokeCommand('create_block', {
-                page_id: this.app.currentPage.id,
-                parent_id: parentId,
-                content: content,
-                position: position
+                request: {
+                    page_id: this.app.currentPage.id,
+                    parent_id: parentId,
+                    content: content,
+                    position: position
+                }
             });
 
             if (response.success) {
@@ -285,9 +287,11 @@ class BlockEditor {
             clearTimeout(this.autoSaveTimeout);
         }
 
-        if (blockId === 'new' || isNaN(parseInt(blockId))) {
+        if (blockId === 'new' || isNaN(parseInt(blockId)) || !blockId) {
+            console.log('⚠️ Attempting to save invalid block ID:', blockId, 'Content:', content);
             // Handle new block creation
             if (content.trim()) {
+                console.log('📝 Creating new block with content:', content);
                 await this.app.createNewBlockWithContent(content);
             }
             return;
@@ -297,8 +301,10 @@ class BlockEditor {
             console.log('💾 Saving block:', blockId, 'Content:', content);
             const response = await this.app.invokeCommand('update_block', {
                 block_id: parseInt(blockId),
-                content: content
+                request: { content: content }
             });
+
+            console.log('📡 Save response:', response);
 
             if (response.success) {
                 console.log('✅ Block saved successfully:', blockId);
@@ -308,11 +314,13 @@ class BlockEditor {
                 // Update block data in memory
                 this.updateBlockInMemory(parseInt(blockId), content);
             } else {
+                console.error('❌ Save failed:', response.error);
                 throw new Error(response.error || 'Failed to save block');
             }
         } catch (error) {
-            console.error('Failed to save block content:', error);
+            console.error('❌ Failed to save block content:', error);
             this.app.showError('Failed to save: ' + error.message);
+            this.app.updateSaveStatus('Save failed');
         }
     }
 
@@ -470,14 +478,20 @@ class BlockEditor {
         const blockId = blockElement.dataset.blockId;
         const content = contentElement.textContent || contentElement.innerHTML;
 
+        console.log('📝 Content input for block:', blockId, 'Content:', content);
+
         // Process content for task detection, etc.
         const processed = this.processBlockContent(content);
         
         // Update block styling based on content
         this.updateBlockStyling(blockElement, processed);
         
-        // Schedule auto-save
-        this.scheduleAutoSave(blockId, content);
+        // Schedule auto-save (but ensure we have a valid block ID)
+        if (blockId && blockId !== 'new' && !isNaN(parseInt(blockId))) {
+            this.scheduleAutoSave(blockId, content);
+        } else {
+            console.log('⚠️ Skipping auto-save for block ID:', blockId, '(will save on blur)');
+        }
 
         // Update word count
         this.updateWordCount();
