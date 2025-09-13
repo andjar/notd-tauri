@@ -5,7 +5,7 @@ import OutlinerManager from './outliner.js';
 import CalendarComponent from './components/calendar.js';
 import SearchComponent from './components/search.js';
 import SidebarComponent from './components/sidebar.js';
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/core';
 
 class OutlinerApp {
     constructor() {
@@ -673,21 +673,7 @@ class OutlinerApp {
     // Calendar Management
     // ================================
     
-    renderCalendar() {
-        // Basic calendar rendering - to be implemented
-        const monthNames = [
-            'January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'
-        ];
-        
-        const now = new Date();
-        const currentMonthName = monthNames[now.getMonth()];
-        const currentYear = now.getFullYear();
-        
-        document.getElementById('current-month').textContent = `${currentMonthName} ${currentYear}`;
-        
-        // TODO: Implement full calendar rendering
-    }
+    // REMOVED: Duplicate stub method - using proper implementation at line 943
     
     // ================================
     // UI Interactions

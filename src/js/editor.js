@@ -496,7 +496,7 @@ class BlockEditor {
     // ================================
 
     processBlockContent(content) {
-        // Basic content processing - link detection, task detection, etc.
+        // Basic content processing - link detection, task detection, properties extraction
         let processed = content;
 
         // Detect and mark page links
@@ -505,11 +505,30 @@ class BlockEditor {
         // Detect task status
         const taskStatus = this.detectTaskStatus(processed);
         
+        // Extract properties from content
+        const properties = this.extractProperties(content);
+        
         return {
             content: processed,
             taskStatus: taskStatus,
-            hasLinks: this.hasPageLinks(content)
+            hasLinks: this.hasPageLinks(content),
+            properties: properties
         };
+    }
+
+    extractProperties(content) {
+        const properties = [];
+        // Match property patterns like "key:: value" or "key: value"
+        const propertyRegex = /^([a-zA-Z_][a-zA-Z0-9_]*)\s*::\s*(.+)$/gm;
+        let match;
+        
+        while ((match = propertyRegex.exec(content)) !== null) {
+            const key = match[1].trim();
+            const value = match[2].trim();
+            properties.push({ key, value, type: 'text' });
+        }
+        
+        return properties;
     }
 
     processPageLinks(content) {
@@ -540,11 +559,16 @@ class BlockEditor {
 
         console.log('📝 Content input for block:', blockId, 'Content:', content);
 
-        // Process content for task detection, etc.
+        // Process content for task detection, properties extraction, etc.
         const processed = this.processBlockContent(content);
         
         // Update block styling based on content
         this.updateBlockStyling(blockElement, processed);
+        
+        // Auto-save extracted properties if block has valid ID
+        if (processed.properties.length > 0 && blockId && blockId !== 'new' && !isNaN(parseInt(blockId))) {
+            this.autoSaveProperties(parseInt(blockId), processed.properties);
+        }
         
         // Schedule auto-save for valid blocks (including new blocks)
         if (blockId && (blockId === 'new' || !isNaN(parseInt(blockId)))) {
@@ -555,6 +579,24 @@ class BlockEditor {
 
         // Update word count
         this.updateWordCount();
+    }
+
+    async autoSaveProperties(blockId, properties) {
+        for (const property of properties) {
+            try {
+                await this.app.invokeCommand('set_block_property', {
+                    block_id: blockId,
+                    request: {
+                        key: property.key,
+                        value: property.value,
+                        value_type: property.type
+                    }
+                });
+                console.log('✅ Auto-saved property:', property.key, '=', property.value);
+            } catch (error) {
+                console.error('❌ Failed to auto-save property:', error);
+            }
+        }
     }
 
     updateBlockStyling(blockElement, processedContent) {

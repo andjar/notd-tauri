@@ -361,16 +361,11 @@ class OutlinerManager {
         console.log('💾 Saving on blur - Block ID:', blockIdRaw, 'Content:', content);
         
         if (blockIdRaw === 'new') {
-            // Handle new block creation
+            // Handle new block creation - delegate to editor for consistent handling
             if (content.trim()) {
                 console.log('📝 Creating new block from "new" block with content:', content);
-                const newBlock = await this.app.blockEditor.createNewBlock(null, null, content.trim());
-                if (newBlock) {
-                    console.log('✅ New block created successfully:', newBlock);
-                    // The block will be re-rendered with proper ID in createNewBlock
-                } else {
-                    console.error('❌ Failed to create new block');
-                }
+                // Use the centralized method to avoid race conditions
+                await this.app.blockEditor.saveBlockContent(blockIdRaw, content);
             } else {
                 console.log('🔄 Empty new block, leaving as is');
             }
