@@ -133,21 +133,8 @@ class OutlinerApp {
         document.getElementById('add-block-btn').addEventListener('click', () => this.createNewBlock());
         
         // Edit mode toggle removed - always in edit mode now
-        
-        // Initialize first block if needed
-        this.initFirstBlock();
     }
     
-    initFirstBlock() {
-        const firstBlock = document.getElementById('first-block');
-        if (firstBlock) {
-            const content = firstBlock.querySelector('.block-content');
-            content.addEventListener('focus', () => this.handleBlockFocus(content));
-            content.addEventListener('blur', () => this.handleBlockBlur(content));
-            content.addEventListener('input', () => this.handleBlockInput(content));
-            content.addEventListener('keydown', (e) => this.handleBlockKeydown(e));
-        }
-    }
     
     initModals() {
         // Quick Open Modal
@@ -672,8 +659,6 @@ class OutlinerApp {
     // ================================
     // Calendar Management
     // ================================
-    
-    // REMOVED: Duplicate stub method - using proper implementation at line 943
     
     // ================================
     // UI Interactions
