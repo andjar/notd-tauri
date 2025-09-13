@@ -30,6 +30,7 @@ class BlockEditor {
             if (response.success) {
                 // Reload page blocks and re-render
                 await this.app.loadPageBlocks(this.app.currentPage.id);
+                this.app.updatePageHeader();
                 this.app.renderBlocks();
                 
                 // Focus the new block
@@ -54,6 +55,29 @@ class BlockEditor {
 
     async createSiblingBlock(currentBlockElement) {
         const blockId = currentBlockElement.dataset.blockId;
+        
+        if (blockId === 'new') {
+            const content = currentBlockElement.querySelector('.block-content').textContent;
+            
+            // Manually create the first block without triggering a full re-render yet.
+            const response = await this.app.invokeCommand('create_block', {
+                request: {
+                    page_id: this.app.currentPage.id,
+                    parent_id: null,
+                    content: content,
+                    position: null
+                }
+            });
+
+            if (response.success) {
+                // Now create a new empty block. This call will trigger load and render.
+                await this.createNewBlock(null, null, '');
+            } else {
+                this.app.showError('Failed to save block: ' + response.error);
+            }
+            return;
+        }
+
         const currentBlockData = this.findBlockById(parseInt(blockId));
         
         if (!currentBlockData) return;
@@ -66,6 +90,29 @@ class BlockEditor {
     }
 
     async createChildBlock(parentBlockElement) {
+        const parentIdRaw = parentBlockElement.dataset.blockId;
+        if (parentIdRaw === 'new') {
+            // On a new block, Ctrl+Enter should first save the current block,
+            // then create a new child block under it.
+            const content = parentBlockElement.querySelector('.block-content').textContent;
+            const response = await this.app.invokeCommand('create_block', {
+                request: {
+                    page_id: this.app.currentPage.id,
+                    parent_id: null,
+                    content: content,
+                    position: null
+                }
+            });
+
+            if (response.success) {
+                const newParentId = response.data.id;
+                // Now create a new empty block as a child.
+                await this.createNewBlock(newParentId, null, '');
+            } else {
+                this.app.showError('Failed to save block: ' + response.error);
+            }
+            return;
+        }
         const parentId = parseInt(parentBlockElement.dataset.blockId);
         
         // Create child block
@@ -287,13 +334,26 @@ class BlockEditor {
             clearTimeout(this.autoSaveTimeout);
         }
 
-        if (blockId === 'new' || isNaN(parseInt(blockId)) || !blockId) {
-            console.log('⚠️ Attempting to save invalid block ID:', blockId, 'Content:', content);
+        if (blockId === 'new') {
+            console.log('📝 Handling new block creation for content:', content);
             // Handle new block creation
             if (content.trim()) {
                 console.log('📝 Creating new block with content:', content);
-                await this.app.createNewBlockWithContent(content);
+                const newBlock = await this.app.createNewBlockWithContent(content.trim());
+                if (newBlock) {
+                    console.log('✅ New block created successfully:', newBlock.id);
+                    // Note: createNewBlock already handles re-rendering, so no need to update DOM here
+                } else {
+                    console.error('❌ Failed to create new block');
+                }
+            } else {
+                console.log('⚠️ Empty content, skipping new block creation');
             }
+            return;
+        }
+
+        if (isNaN(parseInt(blockId)) || !blockId) {
+            console.log('⚠️ Attempting to save invalid block ID:', blockId, 'Content:', content);
             return;
         }
 
@@ -486,8 +546,8 @@ class BlockEditor {
         // Update block styling based on content
         this.updateBlockStyling(blockElement, processed);
         
-        // Schedule auto-save (but ensure we have a valid block ID)
-        if (blockId && blockId !== 'new' && !isNaN(parseInt(blockId))) {
+        // Schedule auto-save for valid blocks (including new blocks)
+        if (blockId && (blockId === 'new' || !isNaN(parseInt(blockId)))) {
             this.scheduleAutoSave(blockId, content);
         } else {
             console.log('⚠️ Skipping auto-save for block ID:', blockId, '(will save on blur)');

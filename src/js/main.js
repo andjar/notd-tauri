@@ -5,7 +5,7 @@ import OutlinerManager from './outliner.js';
 import CalendarComponent from './components/calendar.js';
 import SearchComponent from './components/search.js';
 import SidebarComponent from './components/sidebar.js';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/tauri';
 
 class OutlinerApp {
     constructor() {
@@ -22,11 +22,16 @@ class OutlinerApp {
     
     async init() {
         console.log('Initializing Outliner Application...');
-        
+
         try {
             // Show loading overlay
             this.showLoading();
-            
+
+            // Check if Tauri API is available
+            if (!window.__TAURI__) {
+                throw new Error('Tauri API is not available. This application must be run within a Tauri environment.');
+            }
+
             // Initialize Tauri API (v2 via @tauri-apps/api)
             console.log('Using Tauri v2 JS API');
             
@@ -186,6 +191,9 @@ class OutlinerApp {
     
     async invokeCommand(command, args = {}) {
         try {
+            if (!invoke) {
+                throw new Error('Tauri invoke function is not available. Check your Tauri API imports.');
+            }
             const result = await invoke(command, args);
             return result;
         } catch (error) {
@@ -293,7 +301,7 @@ class OutlinerApp {
                 <div class="empty-page">
                     <div class="empty-block block-item" data-block-id="new">
                         <div class="block-bullet">•</div>
-                        <div class="block-content" contenteditable="true" data-placeholder="Start writing..."></div>
+                        <div class="block-content" contenteditable="true" data-placeholder="Start writing..." data-block-id="new"></div>
                     </div>
                 </div>
             `;
@@ -311,27 +319,81 @@ class OutlinerApp {
     }
     
     attachBlockEventListeners() {
-        // Attach listeners to all block content elements
-        document.querySelectorAll('.block-content').forEach(content => {
-            content.addEventListener('focus', () => this.handleBlockFocus(content));
-            content.addEventListener('blur', () => this.handleBlockBlur(content));
-            content.addEventListener('input', () => this.handleBlockInput(content));
-            content.addEventListener('keydown', (e) => this.handleBlockKeydown(e));
-        });
-        
-        // Attach listeners to block bullets for drag & drop
-        document.querySelectorAll('.block-bullet').forEach(bullet => {
-            console.log('🎯 Attaching drag listeners to bullet:', bullet);
-            bullet.addEventListener('dragstart', (e) => this.handleBlockDragStart(e));
-            bullet.addEventListener('dragover', (e) => this.handleBlockDragOver(e));
-            bullet.addEventListener('drop', (e) => this.handleBlockDrop(e));
-            bullet.addEventListener('contextmenu', (e) => this.handleBlockContextMenu(e));
-        });
-        
-        // Attach context menu listeners to blocks
-        document.querySelectorAll('.block-item').forEach(blockItem => {
-            blockItem.addEventListener('contextmenu', (e) => this.handleBlockContextMenu(e));
-        });
+        // Use event delegation to avoid duplicate listeners
+        const blocksContainer = document.getElementById('blocks-container');
+
+        // Remove existing delegation listeners if any
+        if (this._blockEventDelegationAttached) {
+            blocksContainer.removeEventListener('focus', this._handleBlockFocusDelegated, true);
+            blocksContainer.removeEventListener('blur', this._handleBlockBlurDelegated, true);
+            blocksContainer.removeEventListener('input', this._handleBlockInputDelegated, true);
+            blocksContainer.removeEventListener('keydown', this._handleBlockKeydownDelegated, true);
+            blocksContainer.removeEventListener('dragstart', this._handleBlockDragStartDelegated, true);
+            blocksContainer.removeEventListener('dragover', this._handleBlockDragOverDelegated, true);
+            blocksContainer.removeEventListener('drop', this._handleBlockDropDelegated, true);
+            blocksContainer.removeEventListener('contextmenu', this._handleBlockContextMenuDelegated, true);
+        }
+
+        // Create delegated event handlers
+        this._handleBlockFocusDelegated = (e) => {
+            if (e.target.classList.contains('block-content')) {
+                this.handleBlockFocus(e.target);
+            }
+        };
+
+        this._handleBlockBlurDelegated = (e) => {
+            if (e.target.classList.contains('block-content')) {
+                this.handleBlockBlur(e.target);
+            }
+        };
+
+        this._handleBlockInputDelegated = (e) => {
+            if (e.target.classList.contains('block-content')) {
+                this.handleBlockInput(e.target);
+            }
+        };
+
+        this._handleBlockKeydownDelegated = (e) => {
+            if (e.target.classList.contains('block-content')) {
+                this.handleBlockKeydown(e);
+            }
+        };
+
+        this._handleBlockDragStartDelegated = (e) => {
+            if (e.target.classList.contains('block-bullet')) {
+                this.handleBlockDragStart(e);
+            }
+        };
+
+        this._handleBlockDragOverDelegated = (e) => {
+            if (e.target.classList.contains('block-bullet') || e.target.closest('.block-item')) {
+                this.handleBlockDragOver(e);
+            }
+        };
+
+        this._handleBlockDropDelegated = (e) => {
+            if (e.target.classList.contains('block-bullet') || e.target.closest('.block-item')) {
+                this.handleBlockDrop(e);
+            }
+        };
+
+        this._handleBlockContextMenuDelegated = (e) => {
+            if (e.target.closest('.block-item')) {
+                this.handleBlockContextMenu(e);
+            }
+        };
+
+        // Attach delegated listeners
+        blocksContainer.addEventListener('focus', this._handleBlockFocusDelegated, true);
+        blocksContainer.addEventListener('blur', this._handleBlockBlurDelegated, true);
+        blocksContainer.addEventListener('input', this._handleBlockInputDelegated, true);
+        blocksContainer.addEventListener('keydown', this._handleBlockKeydownDelegated, true);
+        blocksContainer.addEventListener('dragstart', this._handleBlockDragStartDelegated, true);
+        blocksContainer.addEventListener('dragover', this._handleBlockDragOverDelegated, true);
+        blocksContainer.addEventListener('drop', this._handleBlockDropDelegated, true);
+        blocksContainer.addEventListener('contextmenu', this._handleBlockContextMenuDelegated, true);
+
+        this._blockEventDelegationAttached = true;
     }
     
     async handleBlockFocus(contentElement) {
