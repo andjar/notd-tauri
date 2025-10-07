@@ -1,5 +1,5 @@
 use crate::{Error, Result};
-use rusqlite::{Connection as SqliteConnection, OpenFlags};
+use rusqlite::{Connection as SqliteConnection};
 use std::path::{Path, PathBuf};
 
 pub type Connection = SqliteConnection;

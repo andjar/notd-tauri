@@ -1,6 +1,5 @@
 use crate::app::{App, TreeNode};
 use ratatui::{
-    backend::Backend,
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -9,7 +8,7 @@ use ratatui::{
 };
 
 /// Render the header with title and key hints
-pub fn render_header<B: Backend>(frame: &mut Frame, app: &App, area: Rect) {
+pub fn render_header(frame: &mut Frame, app: &App, area: Rect) {
     let title = if let Some(note) = &app.current_note {
         format!(" 📝 {} ", note.title)
     } else {
@@ -37,7 +36,7 @@ pub fn render_header<B: Backend>(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 /// Render the outline view
-pub fn render_outline<B: Backend>(frame: &mut Frame, app: &App, area: Rect) {
+pub fn render_outline(frame: &mut Frame, app: &App, area: Rect) {
     let visible_nodes = app.get_visible_nodes();
 
     if visible_nodes.is_empty() {
@@ -75,7 +74,7 @@ pub fn render_outline<B: Backend>(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 /// Render a single node line with proper indentation
-fn render_node_line(tree_node: &TreeNode) -> Line {
+fn render_node_line(tree_node: &TreeNode) -> Line<'_> {
     let indent = "  ".repeat(tree_node.depth);
     let node = &tree_node.node;
 
@@ -138,7 +137,7 @@ fn render_node_line(tree_node: &TreeNode) -> Line {
 }
 
 /// Render the status bar at the bottom
-pub fn render_status_bar<B: Backend>(frame: &mut Frame, app: &App, area: Rect) {
+pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
     let visible_count = app.get_visible_nodes().len();
     let status_text = format!(
         " {} nodes | Phase 2: Read-Only View | Press 'q' to quit ",

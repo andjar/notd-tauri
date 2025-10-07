@@ -1,5 +1,5 @@
 use crate::models::{TaskStatusLog, TaskStatus, datetime_to_timestamp, timestamp_to_datetime};
-use crate::{Error, Result};
+use crate::{Result};
 use rusqlite::{Connection, params};
 
 pub struct TaskLogRepository;

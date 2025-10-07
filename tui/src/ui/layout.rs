@@ -1,6 +1,5 @@
 use crate::app::App;
 use ratatui::{
-    backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
     Frame,
 };
@@ -8,7 +7,7 @@ use ratatui::{
 use super::{render_header, render_outline, render_status_bar};
 
 /// Render the complete UI
-pub fn render<B: Backend>(frame: &mut Frame, app: &App) {
+pub fn render(frame: &mut Frame, app: &App) {
     let size = frame.size();
 
     // Create main layout: header, content, status bar
@@ -28,7 +27,7 @@ pub fn render<B: Backend>(frame: &mut Frame, app: &App) {
 }
 
 /// Render the main content area (will have sidebar + outliner in future)
-fn render_content<B: Backend>(frame: &mut Frame, app: &App, area: Rect) {
+fn render_content(frame: &mut Frame, app: &App, area: Rect) {
     // For Phase 2, just show the outliner
     // Phase 4 will add sidebar with calendar, pages, tags, favorites
     render_outline(frame, app, area);

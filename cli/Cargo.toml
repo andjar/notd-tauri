@@ -11,5 +11,8 @@ path = "src/main.rs"
 
 [dependencies]
 outliner-core = { path = "../core" }
+outliner-tui = { path = "../tui" }
 anyhow = { workspace = true }
+crossterm = { workspace = true }
+ratatui = { workspace = true }
 

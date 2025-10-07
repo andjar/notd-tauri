@@ -122,7 +122,7 @@ impl App {
             ];
             
             // Create nodes and build hierarchy
-            let root1_id = nodes[0].id.clone();
+            let _root1_id = nodes[0].id.clone();
             let root2_id = nodes[1].id.clone();
             let root5_id = nodes[4].id.clone();
             let root6_id = nodes[5].id.clone();
