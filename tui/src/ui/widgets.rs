@@ -15,7 +15,11 @@ pub fn render_header(frame: &mut Frame, app: &App, area: Rect) {
         " Outliner ".to_string()
     };
 
-    let key_hints = " [q:Quit] [Phase 2: Read-Only] ";
+    let key_hints = if app.is_editing {
+        " [Enter:Save] [Esc:Cancel] [Typing...] "
+    } else {
+        " [q:Quit] [↑/↓:Move] [←/→:Collapse/Expand] [Enter:Edit] [n:New] [d:Del] [Tab/Shift+Tab:Indent] [Alt+↑/↓:Reorder] "
+    };
 
     let header_spans = vec![
         Span::styled(
@@ -51,8 +55,12 @@ pub fn render_outline(frame: &mut Frame, app: &App, area: Rect) {
     // Build lines for each visible node
     let mut lines: Vec<Line> = Vec::new();
 
-    for tree_node in visible_nodes.iter().skip(app.scroll_offset) {
-        let line = render_node_line(tree_node);
+    for (i, tree_node) in visible_nodes.iter().enumerate().skip(app.scroll_offset) {
+        let mut line = render_node_line(tree_node);
+        // Highlight selected line
+        if i == app.cursor_position {
+            line = line.style(Style::default().bg(Color::Blue).fg(Color::Black));
+        }
         lines.push(line);
 
         // Limit to visible area

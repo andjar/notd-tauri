@@ -45,21 +45,58 @@ pub fn handle_key_event(key: KeyEvent, app: &mut crate::app::App) {
         KeyCode::Char('c') | KeyCode::Char('C') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             app.quit();
         }
-        // Future: Add more key handlers in Phase 3
+        // Move/reorder with Alt, plain navigation otherwise (order of patterns matters)
+        KeyCode::Up if key.modifiers.contains(KeyModifiers::ALT) => {
+            if !app.is_editing { let _ = app.move_selected_up(); }
+        }
+        KeyCode::Down if key.modifiers.contains(KeyModifiers::ALT) => {
+            if !app.is_editing { let _ = app.move_selected_down(); }
+        }
         KeyCode::Up => {
-            // Navigate up (Phase 3)
+            if !app.is_editing { app.move_cursor_up(); }
         }
         KeyCode::Down => {
-            // Navigate down (Phase 3)
+            if !app.is_editing { app.move_cursor_down(); }
         }
+        // Expand/Collapse
         KeyCode::Left => {
-            // Collapse node (Phase 3)
+            if !app.is_editing { app.toggle_selected_expand_collapse(Some(false)); }
         }
         KeyCode::Right => {
-            // Expand node (Phase 3)
+            if !app.is_editing { app.toggle_selected_expand_collapse(Some(true)); }
         }
+        // Edit mode controls
         KeyCode::Enter => {
-            // Edit mode (Phase 3)
+            if app.is_editing {
+                let _ = app.commit_edit();
+            } else {
+                app.start_editing();
+            }
+        }
+        KeyCode::Esc => {
+            if app.is_editing { app.cancel_edit(); }
+        }
+        KeyCode::Backspace => {
+            if app.is_editing { app.edit_buffer.pop(); }
+        }
+        KeyCode::Char(ch) => {
+            if app.is_editing { app.edit_buffer.push(ch); }
+            else if ch == 'n' { let _ = app.create_sibling_below(); }
+            else if ch == 'd' { let _ = app.delete_selected(); }
+        }
+        // CRUD via non-char
+        KeyCode::Insert => {
+            if !app.is_editing { let _ = app.create_sibling_below(); }
+        }
+        KeyCode::Delete => {
+            if !app.is_editing { let _ = app.delete_selected(); }
+        }
+        // Indent / Outdent
+        KeyCode::Tab => {
+            if !app.is_editing { let _ = app.indent_selected(); }
+        }
+        KeyCode::BackTab => {
+            if !app.is_editing { let _ = app.outdent_selected(); }
         }
         _ => {}
     }

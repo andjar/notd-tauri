@@ -251,6 +251,70 @@ impl NodeRepository {
         
         Ok(nodes)
     }
+
+    /// Update a node's parent and position in one operation
+    pub fn update_parent_and_position(
+        conn: &Connection,
+        id: &str,
+        new_parent_node_id: Option<&str>,
+        new_position: i32,
+    ) -> Result<()> {
+        let rows_affected = conn.execute(
+            "UPDATE outline_nodes SET parent_node_id = ?1, position = ?2, modified_at = ?3 WHERE id = ?4",
+            params![
+                new_parent_node_id,
+                new_position,
+                datetime_to_timestamp(&chrono::Utc::now()),
+                id,
+            ],
+        )?;
+
+        if rows_affected == 0 {
+            return Err(Error::NotFound(format!("Node not found: {}", id)));
+        }
+
+        Ok(())
+    }
+
+    /// Swap the `position` values for two sibling nodes
+    pub fn swap_positions(conn: &Connection, id_a: &str, id_b: &str) -> Result<()> {
+        let node_a = Self::get_by_id(conn, id_a)?;
+        let node_b = Self::get_by_id(conn, id_b)?;
+
+        // Only allow swap if siblings (same parent and note)
+        if node_a.note_id != node_b.note_id || node_a.parent_node_id != node_b.parent_node_id {
+            return Err(Error::InvalidInput("Nodes are not siblings; cannot swap positions".to_string()));
+        }
+
+        // Use a transaction to keep positions consistent
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
+            "UPDATE outline_nodes SET position = ?1, modified_at = ?2 WHERE id = ?3",
+            params![node_b.position, datetime_to_timestamp(&chrono::Utc::now()), id_a],
+        )?;
+        tx.execute(
+            "UPDATE outline_nodes SET position = ?1, modified_at = ?2 WHERE id = ?3",
+            params![node_a.position, datetime_to_timestamp(&chrono::Utc::now()), id_b],
+        )?;
+        tx.commit()?;
+
+        Ok(())
+    }
+
+    /// Get the next position index for a parent's children (append to end)
+    pub fn get_next_child_position(conn: &Connection, parent_node_id: Option<&str>, note_id: &str) -> Result<i32> {
+        let query = match parent_node_id {
+            Some(_) => "SELECT COALESCE(MAX(position), -1) + 1 FROM outline_nodes WHERE parent_node_id = ?1",
+            None => "SELECT COALESCE(MAX(position), -1) + 1 FROM outline_nodes WHERE note_id = ?1 AND parent_node_id IS NULL",
+        };
+
+        let mut stmt = conn.prepare(query)?;
+        let next_pos: i32 = match parent_node_id {
+            Some(pid) => stmt.query_row(params![pid], |row| row.get(0))?,
+            None => stmt.query_row(params![note_id], |row| row.get(0))?,
+        };
+        Ok(next_pos)
+    }
 }
 
 #[cfg(test)]
