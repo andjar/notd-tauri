@@ -1,9 +1,9 @@
 use crate::app::{App, TreeNode};
 use ratatui::{
-    layout::{Alignment, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    text::{Line, Span, Text},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
     Frame,
 };
 
@@ -17,8 +17,10 @@ pub fn render_header(frame: &mut Frame, app: &App, area: Rect) {
 
     let key_hints = if app.is_editing {
         " [Enter:Save] [Esc:Cancel] [Typing...] "
+    } else if app.page_switcher_open {
+        " [Esc:Close] [↑/↓:Select] [Enter:Open] [Type to filter] "
     } else {
-        " [q:Quit] [↑/↓:Move] [←/→:Collapse/Expand] [Enter:Edit] [n:New] [d:Del] [Tab/Shift+Tab:Indent] [Alt+↑/↓:Reorder] "
+        " [q:Quit] [↑/↓:Move] [←/→:Collapse/Expand] [Enter:Edit] [n:New] [d:Del] [Tab/Shift+Tab:Indent] [Alt+↑/↓:Reorder] [Ctrl+P:Pages] [Ctrl+N:New Page] [Ctrl+D:Del Page] [PgUp/PgDn + Alt+Enter:Open] "
     };
 
     let header_spans = vec![
@@ -44,7 +46,7 @@ pub fn render_outline(frame: &mut Frame, app: &App, area: Rect) {
     let visible_nodes = app.get_visible_nodes();
 
     if visible_nodes.is_empty() {
-        let empty_message = Paragraph::new("No content to display.\n\nPress 'q' to quit.")
+        let empty_message = Paragraph::new("This page is empty. Press 'n' to add a node or Ctrl+N to create a new page.")
             .block(Block::default().borders(Borders::ALL).title(" Outline "))
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::DarkGray));
@@ -148,8 +150,9 @@ fn render_node_line(tree_node: &TreeNode) -> Line<'_> {
 pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
     let visible_count = app.get_visible_nodes().len();
     let status_text = format!(
-        " {} nodes | Phase 2: Read-Only View | Press 'q' to quit ",
-        visible_count
+        " {} nodes | Pages: {} | [Ctrl+P: Switch] [Ctrl+N: New Page] [Ctrl+D: Delete Page] ",
+        visible_count,
+        app.notes.len()
     );
 
     let status_bar = Paragraph::new(status_text)
@@ -157,5 +160,101 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         .alignment(Alignment::Center);
 
     frame.render_widget(status_bar, area);
+}
+
+/// Render the sidebar pages list
+pub fn render_sidebar_pages(frame: &mut Frame, app: &App, area: Rect) {
+    let items: Vec<ListItem> = app
+        .notes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| {
+            let mut line = Line::from(n.title.clone());
+            if Some(&n.id) == app.current_note.as_ref().map(|cn| &cn.id) {
+                line = line.style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
+            }
+            if i == app.sidebar_pages_selected_index {
+                line = line.style(Style::default().bg(Color::Blue).fg(Color::Black));
+            }
+            ListItem::new(line)
+        })
+        .collect();
+
+    let mut state = ListState::default();
+    if !app.notes.is_empty() {
+        state.select(Some(app.sidebar_pages_selected_index));
+    }
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Pages ")
+                .title_alignment(Alignment::Left),
+        )
+        .highlight_style(Style::default().bg(Color::Blue).fg(Color::Black));
+
+    frame.render_stateful_widget(list, area, &mut state);
+}
+
+/// Render the page switcher overlay (center modal with filter input and list)
+pub fn render_page_switcher(frame: &mut Frame, app: &App, area: Rect) {
+    // Centered box
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(35),
+            Constraint::Percentage(30),
+            Constraint::Percentage(35),
+        ])
+        .split(area);
+
+    let area_mid = popup_layout[1];
+    let inner_h = area_mid.height.saturating_sub(2);
+    let inner_w = area_mid.width.saturating_sub(2);
+    let inner_x = area_mid.x + 1;
+    let inner_y = area_mid.y + 1;
+    let inner = Rect { x: inner_x, y: inner_y, width: inner_w, height: inner_h };
+
+    // Draw border and clear background
+    let block = Block::default().borders(Borders::ALL).title(" Page Switcher ");
+    frame.render_widget(Clear, area_mid);
+    frame.render_widget(block, area_mid);
+
+    // Split inner into filter input + list
+    let inner_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(0)])
+        .split(inner);
+
+    // Filter line
+    let filter = Paragraph::new(Text::from(format!("> {}", app.page_filter)))
+        .style(Style::default().fg(Color::White))
+        .block(Block::default());
+    frame.render_widget(filter, inner_chunks[0]);
+
+    // List of filtered notes
+    let filtered = app.get_filtered_notes();
+    let items: Vec<ListItem> = filtered
+        .iter()
+        .enumerate()
+        .map(|(i, n)| {
+            let mut line = Line::from(n.title.clone());
+            if i == app.page_switcher_selection_index {
+                line = line.style(Style::default().bg(Color::Blue).fg(Color::Black));
+            }
+            ListItem::new(line)
+        })
+        .collect();
+
+    let mut state = ListState::default();
+    if !filtered.is_empty() {
+        state.select(Some(app.page_switcher_selection_index));
+    }
+
+    let list = List::new(items)
+        .block(Block::default())
+        .highlight_style(Style::default().bg(Color::Blue).fg(Color::Black));
+    frame.render_stateful_widget(list, inner_chunks[1], &mut state);
 }
 

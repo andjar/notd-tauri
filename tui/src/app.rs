@@ -1,7 +1,7 @@
 use anyhow::Result;
 use outliner_core::{
     models::{Note, OutlineNode},
-    storage::{Database, NoteRepository, NodeRepository, Connection},
+    storage::{Connection, Database, NoteRepository, NodeRepository},
 };
 
 /// Represents a node in the outline tree with its children
@@ -86,6 +86,12 @@ pub struct App {
     pub db_connection: Connection,
     pub is_editing: bool,
     pub edit_buffer: String,
+    // Phase 4 - Pages management
+    pub notes: Vec<Note>,
+    pub sidebar_pages_selected_index: usize,
+    pub page_switcher_open: bool,
+    pub page_filter: String,
+    pub page_switcher_selection_index: usize,
 }
 
 impl App {
@@ -103,6 +109,11 @@ impl App {
             db_connection: conn,
             is_editing: false,
             edit_buffer: String::new(),
+            notes: Vec::new(),
+            sidebar_pages_selected_index: 0,
+            page_switcher_open: false,
+            page_filter: String::new(),
+            page_switcher_selection_index: 0,
         })
     }
 
@@ -190,12 +201,13 @@ impl App {
 
     /// Load the first available note
     pub fn load_first_note(&mut self) -> Result<()> {
-        let notes = NoteRepository::get_all(&self.db_connection)?;
-        
-        if let Some(note) = notes.first() {
-            self.load_note(&note.id)?;
+        self.refresh_notes_list()?;
+        if let Some(note) = self.notes.first() {
+            let id = note.id.clone();
+            self.load_note(&id)?;
+            self.sidebar_pages_selected_index = 0;
         }
-        
+
         Ok(())
     }
 
@@ -395,7 +407,7 @@ impl App {
         if let Some(path) = paths.get(self.cursor_position) {
             if path.len() < 2 { return Ok(()); }
             // Parent path and grandparent path
-            let parent_path = &path[..path.len()-1];
+            let _parent_path = &path[..path.len()-1];
             let grandparent_path = &path[..path.len()-2];
             let grandparent_id_opt = if grandparent_path.is_empty() { None } else { self.get_node_by_path_readonly(grandparent_path).map(|n| n.node.id.clone()) };
             let selected_id = self.get_node_by_path_readonly(path).map(|n| n.node.id.clone()).unwrap();
@@ -505,6 +517,155 @@ impl App {
     /// Quit the application
     pub fn quit(&mut self) {
         self.should_quit = true;
+    }
+
+    // =========================
+    // Phase 4: Pages management
+    // =========================
+
+    /// Refresh the cached list of notes for pages UI
+    pub fn refresh_notes_list(&mut self) -> Result<()> {
+        self.notes = NoteRepository::get_all(&self.db_connection)?;
+        // Keep sidebar selection aligned with current note if possible
+        if let Some(current) = &self.current_note {
+            if let Some(idx) = self.notes.iter().position(|n| n.id == current.id) {
+                self.sidebar_pages_selected_index = idx;
+            }
+        }
+        Ok(())
+    }
+
+    /// Select a page by index from `notes`
+    pub fn select_page_by_index(&mut self, index: usize) -> Result<()> {
+        if index < self.notes.len() {
+            let id = self.notes[index].id.clone();
+            self.sidebar_pages_selected_index = index;
+            self.load_note(&id)?;
+        }
+        Ok(())
+    }
+
+    /// Create a new page with a generated title and switch to it
+    pub fn create_new_page(&mut self) -> Result<()> {
+        // Generate a unique title like "Untitled" or "Untitled (n)"
+        let base = "Untitled".to_string();
+        let mut title = base.clone();
+        let mut suffix = 1;
+        let existing_titles: std::collections::HashSet<String> = self
+            .notes
+            .iter()
+            .map(|n| n.title.to_lowercase())
+            .collect();
+        while existing_titles.contains(&title.to_lowercase()) {
+            title = format!("{} ({})", base, suffix);
+            suffix += 1;
+        }
+
+        let note = Note::new(title);
+        NoteRepository::create(&self.db_connection, &note)?;
+        self.refresh_notes_list()?;
+        if let Some(idx) = self.notes.iter().position(|n| n.id == note.id) {
+            self.select_page_by_index(idx)?;
+        }
+        Ok(())
+    }
+
+    /// Delete the current page; if none remain, create a new default
+    pub fn delete_current_page(&mut self) -> Result<()> {
+        let current_id = match &self.current_note { Some(n) => n.id.clone(), None => return Ok(()) };
+        NoteRepository::delete(&self.db_connection, &current_id)?;
+        self.refresh_notes_list()?;
+        if self.notes.is_empty() {
+            // Ensure at least one page exists
+            let note = Note::new("Welcome".to_string());
+            NoteRepository::create(&self.db_connection, &note)?;
+            self.refresh_notes_list()?;
+        }
+        // Load first note or keep index if valid
+        let idx = self.sidebar_pages_selected_index.min(self.notes.len().saturating_sub(1));
+        if !self.notes.is_empty() {
+            self.select_page_by_index(idx)?;
+        }
+        Ok(())
+    }
+
+    /// Navigate sidebar page selection up
+    pub fn sidebar_select_up(&mut self) {
+        if self.sidebar_pages_selected_index > 0 {
+            self.sidebar_pages_selected_index -= 1;
+        }
+    }
+
+    /// Navigate sidebar page selection down
+    pub fn sidebar_select_down(&mut self) {
+        let last = self.notes.len().saturating_sub(1);
+        if self.sidebar_pages_selected_index < last {
+            self.sidebar_pages_selected_index += 1;
+        }
+    }
+
+    /// Activate the sidebar-selected page
+    pub fn sidebar_activate_selected(&mut self) -> Result<()> {
+        self.select_page_by_index(self.sidebar_pages_selected_index)
+    }
+
+    /// Open the page switcher overlay
+    pub fn open_page_switcher(&mut self) -> Result<()> {
+        self.page_switcher_open = true;
+        self.page_filter.clear();
+        self.page_switcher_selection_index = 0;
+        // Ensure notes list is up to date
+        self.refresh_notes_list()?;
+        Ok(())
+    }
+
+    /// Close the page switcher overlay
+    pub fn close_page_switcher(&mut self) {
+        self.page_switcher_open = false;
+        self.page_filter.clear();
+        self.page_switcher_selection_index = 0;
+    }
+
+    /// Get filtered notes based on the current page filter (substring, case-insensitive)
+    pub fn get_filtered_notes(&self) -> Vec<&Note> {
+        if self.page_filter.is_empty() {
+            return self.notes.iter().collect();
+        }
+        let needle = self.page_filter.to_lowercase();
+        self
+            .notes
+            .iter()
+            .filter(|n| n.title.to_lowercase().contains(&needle))
+            .collect()
+    }
+
+    /// Move selection in page switcher up
+    pub fn page_switcher_up(&mut self) {
+        if self.page_switcher_selection_index > 0 {
+            self.page_switcher_selection_index -= 1;
+        }
+    }
+
+    /// Move selection in page switcher down
+    pub fn page_switcher_down(&mut self) {
+        let last = self.get_filtered_notes().len().saturating_sub(1);
+        if self.page_switcher_selection_index < last {
+            self.page_switcher_selection_index += 1;
+        }
+    }
+
+    /// Apply the current selection in page switcher
+    pub fn page_switcher_activate(&mut self) -> Result<()> {
+        let filtered = self.get_filtered_notes();
+        if let Some(note) = filtered.get(self.page_switcher_selection_index) {
+            // Take copies before mutable borrows
+            let selected_id = note.id.clone();
+            let sidebar_idx = self.notes.iter().position(|n| n.id == selected_id);
+            if let Some(idx) = sidebar_idx { self.sidebar_pages_selected_index = idx; }
+            self.load_note(&selected_id)?;
+        }
+        self.close_page_switcher();
+        Ok(())
     }
 }
 

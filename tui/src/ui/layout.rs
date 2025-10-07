@@ -4,7 +4,7 @@ use ratatui::{
     Frame,
 };
 
-use super::{render_header, render_outline, render_status_bar};
+use super::{render_header, render_outline, render_status_bar, render_sidebar_pages, render_page_switcher};
 
 /// Render the complete UI
 pub fn render(frame: &mut Frame, app: &App) {
@@ -24,12 +24,25 @@ pub fn render(frame: &mut Frame, app: &App) {
     render_header(frame, app, chunks[0]);
     render_content(frame, app, chunks[1]);
     render_status_bar(frame, app, chunks[2]);
+
+    // Overlay: Page switcher (drawn last)
+    if app.page_switcher_open {
+        render_page_switcher(frame, app, size);
+    }
 }
 
 /// Render the main content area (will have sidebar + outliner in future)
 fn render_content(frame: &mut Frame, app: &App, area: Rect) {
-    // For Phase 2, just show the outliner
-    // Phase 4 will add sidebar with calendar, pages, tags, favorites
-    render_outline(frame, app, area);
+    // Phase 4: Split content into sidebar and outline
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(30), // Sidebar width
+            Constraint::Min(0),     // Main outliner
+        ])
+        .split(area);
+
+    render_sidebar_pages(frame, app, chunks[0]);
+    render_outline(frame, app, chunks[1]);
 }
 
