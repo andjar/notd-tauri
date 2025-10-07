@@ -6,6 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
     Frame,
 };
+use outliner_core::storage::{TagRepository, LinkRepository, NoteRepository};
 
 /// Render the header with title and key hints
 pub fn render_header(frame: &mut Frame, app: &App, area: Rect) {
@@ -19,8 +20,10 @@ pub fn render_header(frame: &mut Frame, app: &App, area: Rect) {
         " [Enter:Save] [Esc:Cancel] [Typing...] "
     } else if app.page_switcher_open {
         " [Esc:Close] [↑/↓:Select] [Enter:Open] [Type to filter] "
+    } else if app.search_open {
+        " [Esc:Close] [Type to search] [Backspace:Delete] "
     } else {
-        " [q:Quit] [↑/↓:Move] [←/→:Collapse/Expand] [Enter:Edit] [n:New] [d:Del] [Tab/Shift+Tab:Indent] [Alt+↑/↓:Reorder] [Ctrl+P:Pages] [Ctrl+N:New Page] [Ctrl+D:Del Page] [PgUp/PgDn + Alt+Enter:Open] "
+        " [q:Quit] [↑/↓:Move] [←/→:Collapse/Expand] [Enter:Edit] [n:New] [d:Del] [Tab/Shift+Tab:Indent] [Alt+↑/↓:Reorder] [/:Search] [Ctrl+P:Pages] [Ctrl+N:New Page] [Ctrl+D:Del Page] [PgUp/PgDn + Alt+Enter:Open] "
     };
 
     let header_spans = vec![
@@ -149,11 +152,11 @@ fn render_node_line(tree_node: &TreeNode) -> Line<'_> {
 /// Render the status bar at the bottom
 pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
     let visible_count = app.get_visible_nodes().len();
-    let status_text = format!(
-        " {} nodes | Pages: {} | [Ctrl+P: Switch] [Ctrl+N: New Page] [Ctrl+D: Delete Page] ",
-        visible_count,
-        app.notes.len()
-    );
+    let status_text = if let Some(tag) = &app.tag_filter {
+        format!(" {} nodes | Pages: {} | Tag Filter: #{} | [/:Search] [Ctrl+P: Switch] [Ctrl+N: New Page] [Ctrl+D: Delete Page] ", visible_count, app.notes.len(), tag)
+    } else {
+        format!(" {} nodes | Pages: {} | [/:Search] [Ctrl+P: Switch] [Ctrl+N: New Page] [Ctrl+D: Delete Page] ", visible_count, app.notes.len())
+    };
 
     let status_bar = Paragraph::new(status_text)
         .style(Style::default().bg(Color::DarkGray).fg(Color::White))
@@ -195,6 +198,94 @@ pub fn render_sidebar_pages(frame: &mut Frame, app: &App, area: Rect) {
         .highlight_style(Style::default().bg(Color::Blue).fg(Color::Black));
 
     frame.render_stateful_widget(list, area, &mut state);
+}
+
+/// Render sidebar with Tags panel (top) and Pages list (bottom)
+pub fn render_sidebar_tags_and_pages(frame: &mut Frame, app: &App, area: Rect) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(10), Constraint::Min(0)])
+        .split(area);
+
+    // Tags panel (usage counts)
+    let mut tag_lines: Vec<Line> = Vec::new();
+    if let Ok(counts) = TagRepository::get_usage_counts(&app.db_connection) {
+        for (tag, count) in counts.into_iter().take(8) {
+            let mut line = Line::from(format!("#{} ({})", tag.name, count));
+            if let Some(active) = &app.tag_filter { if *active == tag.name { line = line.style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)); } }
+            tag_lines.push(line);
+        }
+    }
+    if tag_lines.is_empty() { tag_lines.push(Line::from("No tags")); }
+    let tags_widget = Paragraph::new(tag_lines)
+        .block(Block::default().borders(Borders::ALL).title(" Tags "))
+        .wrap(Wrap { trim: true });
+    frame.render_widget(tags_widget, chunks[0]);
+
+    // Pages list below
+    render_sidebar_pages(frame, app, chunks[1]);
+}
+
+/// Render backlinks panel for the current note
+pub fn render_backlinks_panel(frame: &mut Frame, app: &App, area: Rect) {
+    let mut lines: Vec<Line> = Vec::new();
+    if let Some(current) = &app.current_note {
+        if let Ok(links) = LinkRepository::get_backlinks(&app.db_connection, &current.id) {
+            for link in links.into_iter().take((area.height as usize).saturating_sub(2)) {
+                // Resolve source note title if possible
+                let title = NoteRepository::get_by_id(&app.db_connection, &link.source_note_id)
+                    .map(|n| n.title)
+                    .unwrap_or(link.source_note_id);
+                let text = if let Some(txt) = link.link_text { format!("{} — {}", title, txt) } else { title };
+                lines.push(Line::from(text));
+            }
+        }
+    }
+    if lines.is_empty() { lines.push(Line::from("No backlinks")); }
+    let widget = Paragraph::new(lines)
+        .block(Block::default().borders(Borders::ALL).title(" Backlinks "))
+        .wrap(Wrap { trim: true });
+    frame.render_widget(widget, area);
+}
+
+/// Render the search overlay with live results
+pub fn render_search_overlay(frame: &mut Frame, app: &App, area: Rect) {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(25), Constraint::Percentage(50), Constraint::Percentage(25)])
+        .split(area);
+
+    let area_mid = popup_layout[1];
+    let inner_h = area_mid.height.saturating_sub(2);
+    let inner_w = area_mid.width.saturating_sub(2);
+    let inner_x = area_mid.x + 1;
+    let inner_y = area_mid.y + 1;
+    let inner = Rect { x: inner_x, y: inner_y, width: inner_w, height: inner_h };
+
+    // Border and clear
+    let block = Block::default().borders(Borders::ALL).title(" Search ");
+    frame.render_widget(Clear, area_mid);
+    frame.render_widget(block, area_mid);
+
+    // Split into input + results
+    let inner_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(0)])
+        .split(inner);
+
+    let input = Paragraph::new(Text::from(format!("/ {}", app.search_query)))
+        .style(Style::default().fg(Color::White))
+        .block(Block::default());
+    frame.render_widget(input, inner_chunks[0]);
+
+    // Results list
+    let items: Vec<ListItem> = app
+        .search_results
+        .iter()
+        .map(|n| ListItem::new(Line::from(n.content.clone())))
+        .collect();
+    let list = List::new(items).block(Block::default());
+    frame.render_widget(list, inner_chunks[1]);
 }
 
 /// Render the page switcher overlay (center modal with filter input and list)

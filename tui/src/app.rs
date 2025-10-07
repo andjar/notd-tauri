@@ -1,7 +1,7 @@
 use anyhow::Result;
 use outliner_core::{
     models::{Note, OutlineNode},
-    storage::{Connection, Database, NoteRepository, NodeRepository},
+    storage::{Connection, Database, NoteRepository, NodeRepository, TagRepository, LinkRepository},
 };
 
 /// Represents a node in the outline tree with its children
@@ -92,6 +92,11 @@ pub struct App {
     pub page_switcher_open: bool,
     pub page_filter: String,
     pub page_switcher_selection_index: usize,
+    // Phase 5 - Search & Tags & Backlinks
+    pub search_open: bool,
+    pub search_query: String,
+    pub search_results: Vec<OutlineNode>,
+    pub tag_filter: Option<String>,
 }
 
 impl App {
@@ -114,6 +119,10 @@ impl App {
             page_switcher_open: false,
             page_filter: String::new(),
             page_switcher_selection_index: 0,
+            search_open: false,
+            search_query: String::new(),
+            search_results: Vec::new(),
+            tag_filter: None,
         })
     }
 
@@ -327,9 +336,43 @@ impl App {
         node.content = self.edit_buffer.clone();
         node.touch();
         NodeRepository::update(&self.db_connection, &node)?;
+        // Phase 5: update tags and links after content change
+        self.update_tags_and_links_for_node(&node)?;
         self.is_editing = false;
         self.edit_buffer.clear();
         self.refresh_current_note_preserve_selection(Some(&selected_id))?;
+        Ok(())
+    }
+
+    /// Phase 5: Parse tags and wiki links, persist associations
+    fn update_tags_and_links_for_node(&mut self, node: &OutlineNode) -> Result<()> {
+        // Parse tags like #tag-name
+        let re_tags = regex::Regex::new(r"(?P<tag>#([A-Za-z0-9_-]+))").unwrap();
+        let mut tags: Vec<String> = re_tags
+            .captures_iter(&node.content)
+            .filter_map(|c| c.get(2).map(|m| m.as_str().to_string()))
+            .collect();
+        tags.sort();
+        tags.dedup();
+        TagRepository::set_tags_for_node(&self.db_connection, &node.id, &tags)?;
+
+        // Refresh links: delete old ones for this node, then create from [[Title]]
+        LinkRepository::delete_by_source_node(&self.db_connection, &node.id)?;
+        let re_links = regex::Regex::new(r"\[\[([^\]]+)\]\]").unwrap();
+        for cap in re_links.captures_iter(&node.content) {
+            let title = cap.get(1).map(|m| m.as_str().trim()).unwrap_or("");
+            if title.is_empty() { continue; }
+            if let Ok(target) = NoteRepository::get_by_title_exact(&self.db_connection, title) {
+                let source_note_id = match &self.current_note { Some(n) => n.id.clone(), None => continue };
+                let link = outliner_core::models::Link::new_wiki_link(
+                    source_note_id,
+                    Some(node.id.clone()),
+                    target.id,
+                    Some(title.to_string()),
+                );
+                let _ = LinkRepository::create(&self.db_connection, &link)?;
+            }
+        }
         Ok(())
     }
 
@@ -526,6 +569,11 @@ impl App {
     /// Refresh the cached list of notes for pages UI
     pub fn refresh_notes_list(&mut self) -> Result<()> {
         self.notes = NoteRepository::get_all(&self.db_connection)?;
+        // Apply tag filter if present (Phase 5)
+        if let Some(tag_name) = &self.tag_filter {
+            let note_ids = TagRepository::get_note_ids_for_tag_name(&self.db_connection, tag_name)?;
+            self.notes.retain(|n| note_ids.iter().any(|id| *id == n.id));
+        }
         // Keep sidebar selection aligned with current note if possible
         if let Some(current) = &self.current_note {
             if let Some(idx) = self.notes.iter().position(|n| n.id == current.id) {
@@ -533,6 +581,54 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    // =========================
+    // Phase 5: Search
+    // =========================
+    pub fn open_search(&mut self) {
+        self.search_open = true;
+        self.search_query.clear();
+        self.search_results.clear();
+    }
+
+    pub fn close_search(&mut self) {
+        self.search_open = false;
+        self.search_query.clear();
+        self.search_results.clear();
+    }
+
+    pub fn update_search_query(&mut self, ch: char) {
+        self.search_query.push(ch);
+        self.run_search();
+    }
+
+    pub fn backspace_search_query(&mut self) {
+        self.search_query.pop();
+        self.run_search();
+    }
+
+    pub fn run_search(&mut self) {
+        if self.search_query.trim().is_empty() {
+            self.search_results.clear();
+            return;
+        }
+        if let Ok(results) = NodeRepository::search(&self.db_connection, &self.search_query) {
+            self.search_results = results;
+        }
+    }
+
+    // =========================
+    // Phase 5: Tags filter
+    // =========================
+    pub fn clear_tag_filter(&mut self) -> Result<()> {
+        self.tag_filter = None;
+        self.refresh_notes_list()
+    }
+
+    pub fn set_tag_filter(&mut self, tag_name: String) -> Result<()> {
+        self.tag_filter = Some(tag_name);
+        self.refresh_notes_list()
     }
 
     /// Select a page by index from `notes`

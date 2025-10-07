@@ -165,6 +165,46 @@ impl TagRepository {
         
         Ok(results)
     }
+
+    /// Get distinct note IDs that contain at least one node with the given tag name
+    pub fn get_note_ids_for_tag_name(conn: &Connection, tag_name: &str) -> Result<Vec<String>> {
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT n.note_id \
+             FROM node_tags nt \
+             INNER JOIN tags t ON t.id = nt.tag_id \
+             INNER JOIN outline_nodes n ON n.id = nt.node_id \
+             WHERE t.name = ?1"
+        )?;
+
+        let note_ids = stmt.query_map(params![tag_name], |row| {
+            let id: String = row.get(0)?;
+            Ok(id)
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        Ok(note_ids)
+    }
+
+    /// Remove all tag associations from a node
+    pub fn remove_all_from_node(conn: &Connection, node_id: &str) -> Result<()> {
+        conn.execute(
+            "DELETE FROM node_tags WHERE node_id = ?1",
+            params![node_id],
+        )?;
+        Ok(())
+    }
+
+    /// Set tags for a node to exactly the provided tag names (creates tags as needed)
+    pub fn set_tags_for_node(conn: &Connection, node_id: &str, tag_names: &[String]) -> Result<()> {
+        // Start by clearing existing associations
+        Self::remove_all_from_node(conn, node_id)?;
+        // Add each tag by name, creating if necessary
+        for name in tag_names {
+            let tag = Self::get_or_create(conn, name, None)?;
+            if let Some(tag_id) = tag.id { Self::add_to_node(conn, node_id, tag_id)?; }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

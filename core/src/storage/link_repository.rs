@@ -105,6 +105,15 @@ impl LinkRepository {
         Ok(())
     }
 
+    /// Delete all links originating from a specific source node
+    pub fn delete_by_source_node(conn: &Connection, source_node_id: &str) -> Result<usize> {
+        let rows_affected = conn.execute(
+            "DELETE FROM links WHERE source_node_id = ?1",
+            params![source_node_id],
+        )?;
+        Ok(rows_affected)
+    }
+
     /// Delete all links from a source note
     pub fn delete_by_source_note(conn: &Connection, source_note_id: &str) -> Result<usize> {
         let rows_affected = conn.execute(

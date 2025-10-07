@@ -4,7 +4,7 @@ use ratatui::{
     Frame,
 };
 
-use super::{render_header, render_outline, render_status_bar, render_sidebar_pages, render_page_switcher};
+use super::{render_header, render_outline, render_status_bar, render_page_switcher, render_search_overlay, render_sidebar_tags_and_pages, render_backlinks_panel};
 
 /// Render the complete UI
 pub fn render(frame: &mut Frame, app: &App) {
@@ -25,9 +25,12 @@ pub fn render(frame: &mut Frame, app: &App) {
     render_content(frame, app, chunks[1]);
     render_status_bar(frame, app, chunks[2]);
 
-    // Overlay: Page switcher (drawn last)
+    // Overlays (drawn last)
     if app.page_switcher_open {
         render_page_switcher(frame, app, size);
+    }
+    if app.search_open {
+        render_search_overlay(frame, app, size);
     }
 }
 
@@ -39,10 +42,12 @@ fn render_content(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([
             Constraint::Length(30), // Sidebar width
             Constraint::Min(0),     // Main outliner
+            Constraint::Length(30), // Backlinks panel
         ])
         .split(area);
 
-    render_sidebar_pages(frame, app, chunks[0]);
+    render_sidebar_tags_and_pages(frame, app, chunks[0]);
     render_outline(frame, app, chunks[1]);
+    render_backlinks_panel(frame, app, chunks[2]);
 }
 

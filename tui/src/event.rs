@@ -38,6 +38,24 @@ impl EventHandler {
 
 /// Handle key events for the application
 pub fn handle_key_event(key: KeyEvent, app: &mut crate::app::App) {
+    // When search is open, handle search input first
+    if app.search_open {
+        match key.code {
+            KeyCode::Esc => app.close_search(),
+            KeyCode::Enter => {
+                // If query starts with #, treat as tag filter
+                if app.search_query.starts_with('#') {
+                    let name = app.search_query.trim_start_matches('#').trim().to_string();
+                    if !name.is_empty() { let _ = app.set_tag_filter(name); }
+                    app.close_search();
+                }
+            }
+            KeyCode::Backspace => { app.backspace_search_query(); },
+            KeyCode::Char(c) => { if !key.modifiers.contains(KeyModifiers::CONTROL) { app.update_search_query(c); } },
+            _ => {}
+        }
+        return;
+    }
     // When page switcher is open, handle its own controls first
     if app.page_switcher_open {
         match key.code {
@@ -53,6 +71,10 @@ pub fn handle_key_event(key: KeyEvent, app: &mut crate::app::App) {
     }
 
     match key.code {
+        // Search toggle
+        KeyCode::Char('/') => {
+            if !app.is_editing { app.open_search(); }
+        }
         KeyCode::Char('q') | KeyCode::Char('Q') => {
             app.quit();
         }
@@ -111,6 +133,10 @@ pub fn handle_key_event(key: KeyEvent, app: &mut crate::app::App) {
             if app.is_editing { app.edit_buffer.push(ch); }
             else if ch == 'n' { let _ = app.create_sibling_below(); }
             else if ch == 'd' { let _ = app.delete_selected(); }
+            else if ch == 't' && key.modifiers.contains(KeyModifiers::CONTROL) {
+                // Ctrl+T clears tag filter
+                let _ = app.clear_tag_filter();
+            }
         }
         // CRUD via non-char
         KeyCode::Insert => {

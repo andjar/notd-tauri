@@ -110,6 +110,24 @@ impl NoteRepository {
         let count: i64 = conn.query_row("SELECT COUNT(*) FROM notes", [], |row| row.get(0))?;
         Ok(count)
     }
+
+    /// Get a note by exact title match (case-sensitive)
+    pub fn get_by_title_exact(conn: &Connection, title: &str) -> Result<Note> {
+        let mut stmt = conn.prepare(
+            "SELECT id, title, created_at, modified_at FROM notes WHERE title = ?1"
+        )?;
+
+        let note = stmt.query_row(params![title], |row| {
+            Ok(Note {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                created_at: timestamp_to_datetime(row.get(2)?),
+                modified_at: timestamp_to_datetime(row.get(3)?),
+            })
+        })?;
+
+        Ok(note)
+    }
 }
 
 #[cfg(test)]
