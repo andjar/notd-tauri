@@ -71,6 +71,21 @@ pub fn handle_key_event(key: KeyEvent, app: &mut crate::app::App) {
     }
 
     match key.code {
+        // Calendar interactions (Shift-modified first to avoid unreachable patterns)
+        KeyCode::Left if key.modifiers.contains(KeyModifiers::SHIFT) => { app.calendar_move_day(-1); }
+        KeyCode::Right if key.modifiers.contains(KeyModifiers::SHIFT) => { app.calendar_move_day(1); }
+        KeyCode::Up if key.modifiers.contains(KeyModifiers::SHIFT) => { app.calendar_move_week(-1); }
+        KeyCode::Down if key.modifiers.contains(KeyModifiers::SHIFT) => { app.calendar_move_week(1); }
+        KeyCode::PageUp if key.modifiers.contains(KeyModifiers::SHIFT) => { app.calendar_prev_month(); }
+        KeyCode::PageDown if key.modifiers.contains(KeyModifiers::SHIFT) => { app.calendar_next_month(); }
+        KeyCode::Enter if key.modifiers.contains(KeyModifiers::SHIFT) => { if !app.is_editing { let _ = app.open_selected_daily_note(); } }
+        // Task toggle
+        KeyCode::Char('x') => {
+            if !app.is_editing { let _ = app.toggle_selected_task(); }
+        }
+        KeyCode::Char(' ') => {
+            if !app.is_editing { let _ = app.toggle_selected_task(); }
+        }
         // Search toggle
         KeyCode::Char('/') => {
             if !app.is_editing { app.open_search(); }
@@ -115,7 +130,7 @@ pub fn handle_key_event(key: KeyEvent, app: &mut crate::app::App) {
         KeyCode::Right => {
             if !app.is_editing { app.toggle_selected_expand_collapse(Some(true)); }
         }
-        // Edit mode controls
+        // Edit mode controls (generic Enter after Shift+Enter)
         KeyCode::Enter => {
             if app.is_editing {
                 let _ = app.commit_edit();

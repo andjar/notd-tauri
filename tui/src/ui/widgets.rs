@@ -7,6 +7,7 @@ use ratatui::{
     Frame,
 };
 use outliner_core::storage::{TagRepository, LinkRepository, NoteRepository};
+use chrono::{Datelike, NaiveDate, Weekday};
 
 /// Render the header with title and key hints
 pub fn render_header(frame: &mut Frame, app: &App, area: Rect) {
@@ -23,7 +24,7 @@ pub fn render_header(frame: &mut Frame, app: &App, area: Rect) {
     } else if app.search_open {
         " [Esc:Close] [Type to search] [Backspace:Delete] "
     } else {
-        " [q:Quit] [↑/↓:Move] [←/→:Collapse/Expand] [Enter:Edit] [n:New] [d:Del] [Tab/Shift+Tab:Indent] [Alt+↑/↓:Reorder] [/:Search] [Ctrl+P:Pages] [Ctrl+N:New Page] [Ctrl+D:Del Page] [PgUp/PgDn + Alt+Enter:Open] "
+        " [q:Quit] [↑/↓:Move] [←/→:Collapse/Expand] [Enter:Edit] [n:New] [d:Del] [x:Toggle Task] [Tab/Shift+Tab:Indent] [Alt+↑/↓:Reorder] [/:Search] [Ctrl+P:Pages] [Ctrl+N:New Page] [Ctrl+D:Del Page] [PgUp/PgDn + Alt+Enter:Open] [Shift+Arrows:Calendar] [Shift+Enter:Open Daily] "
     };
 
     let header_spans = vec![
@@ -204,8 +205,11 @@ pub fn render_sidebar_pages(frame: &mut Frame, app: &App, area: Rect) {
 pub fn render_sidebar_tags_and_pages(frame: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(10), Constraint::Min(0)])
+        .constraints([Constraint::Length(9), Constraint::Length(10), Constraint::Min(0)])
         .split(area);
+
+    // Calendar at the top
+    render_calendar(frame, app, chunks[0]);
 
     // Tags panel (usage counts)
     let mut tag_lines: Vec<Line> = Vec::new();
@@ -220,10 +224,10 @@ pub fn render_sidebar_tags_and_pages(frame: &mut Frame, app: &App, area: Rect) {
     let tags_widget = Paragraph::new(tag_lines)
         .block(Block::default().borders(Borders::ALL).title(" Tags "))
         .wrap(Wrap { trim: true });
-    frame.render_widget(tags_widget, chunks[0]);
+    frame.render_widget(tags_widget, chunks[1]);
 
     // Pages list below
-    render_sidebar_pages(frame, app, chunks[1]);
+    render_sidebar_pages(frame, app, chunks[2]);
 }
 
 /// Render backlinks panel for the current note
@@ -347,5 +351,61 @@ pub fn render_page_switcher(frame: &mut Frame, app: &App, area: Rect) {
         .block(Block::default())
         .highlight_style(Style::default().bg(Color::Blue).fg(Color::Black));
     frame.render_stateful_widget(list, inner_chunks[1], &mut state);
+}
+
+/// Render a simple month calendar with current day and selection highlights
+pub fn render_calendar(frame: &mut Frame, app: &App, area: Rect) {
+    let mut lines: Vec<Line> = Vec::new();
+    let month_start = app.calendar_month_start;
+    let title = format!("{} {}", month_start.format("%B"), month_start.year());
+    lines.push(Line::from(Span::styled(title, Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))));
+    lines.push(Line::from("Mo Tu We Th Fr Sa Su"));
+
+    // Determine grid start (Monday as first column)
+    let first_weekday = match month_start.weekday() { Weekday::Mon => 0, Weekday::Tue => 1, Weekday::Wed => 2, Weekday::Thu => 3, Weekday::Fri => 4, Weekday::Sat => 5, Weekday::Sun => 6 };
+    let mut day = 1i32;
+    let days_in_month = days_in_month(month_start.year(), month_start.month());
+    let today = chrono::Utc::now().date_naive();
+
+    // Up to 6 rows
+    for row in 0..6 {
+        let mut row_spans: Vec<Span> = Vec::new();
+        for col in 0..7 {
+            let mut text = "  ".to_string();
+            let cell_index = row * 7 + col;
+            if cell_index >= first_weekday && day <= days_in_month as i32 {
+                text = format!("{:>2}", day);
+                let date = NaiveDate::from_ymd_opt(month_start.year(), month_start.month(), day as u32)
+                    .unwrap_or(month_start);
+                let mut style = Style::default().fg(Color::White);
+                if date == today {
+                    style = style.fg(Color::Cyan).add_modifier(Modifier::BOLD);
+                }
+                if date == app.calendar_selected {
+                    style = style.bg(Color::Blue).fg(Color::Black);
+                }
+                row_spans.push(Span::styled(text, style));
+                day += 1;
+            } else {
+                row_spans.push(Span::raw(text));
+            }
+            if col < 6 { row_spans.push(Span::raw(" ")); }
+        }
+        lines.push(Line::from(row_spans));
+        if day > days_in_month as i32 { break; }
+    }
+
+    let widget = Paragraph::new(lines)
+        .block(Block::default().borders(Borders::ALL).title(" Calendar "))
+        .wrap(Wrap { trim: true });
+    frame.render_widget(widget, area);
+}
+
+fn days_in_month(year: i32, month: u32) -> u32 {
+    // Next month first day minus one day
+    let (ny, nm) = if month == 12 { (year + 1, 1) } else { (year, month + 1) };
+    let first_next = NaiveDate::from_ymd_opt(ny, nm, 1).unwrap();
+    let last_this = first_next - chrono::Duration::days(1);
+    last_this.day()
 }
 

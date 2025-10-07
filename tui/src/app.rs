@@ -1,8 +1,12 @@
 use anyhow::Result;
 use outliner_core::{
-    models::{Note, OutlineNode},
-    storage::{Connection, Database, NoteRepository, NodeRepository, TagRepository, LinkRepository},
+    models::{Note, OutlineNode, TaskStatusLog, TaskStatus},
+    storage::{
+        Connection, Database, NoteRepository, NodeRepository, TagRepository, LinkRepository,
+        TaskLogRepository, DailyNoteRepository,
+    },
 };
+use chrono::{NaiveDate, Datelike, Duration};
 
 /// Represents a node in the outline tree with its children
 #[derive(Debug, Clone)]
@@ -97,6 +101,9 @@ pub struct App {
     pub search_query: String,
     pub search_results: Vec<OutlineNode>,
     pub tag_filter: Option<String>,
+    // Phase 6 - Calendar & Daily Notes
+    pub calendar_month_start: NaiveDate,
+    pub calendar_selected: NaiveDate,
 }
 
 impl App {
@@ -104,6 +111,9 @@ impl App {
     pub fn new(db_path: &str) -> Result<Self> {
         let db = Database::new(db_path);
         let conn = db.get_or_create()?;
+        let today = chrono::Utc::now().date_naive();
+        let month_start = NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
+            .unwrap_or(today);
         
         Ok(Self {
             should_quit: false,
@@ -123,6 +133,8 @@ impl App {
             search_query: String::new(),
             search_results: Vec::new(),
             tag_filter: None,
+            calendar_month_start: month_start,
+            calendar_selected: today,
         })
     }
 
@@ -334,6 +346,8 @@ impl App {
         let selected_id = match self.get_selected_node_id() { Some(id) => id, None => return Ok(()) };
         let mut node = NodeRepository::get_by_id(&self.db_connection, &selected_id)?;
         node.content = self.edit_buffer.clone();
+        // Phase 6: parse task checkbox markers in content
+        Self::apply_task_parsing(&mut node);
         node.touch();
         NodeRepository::update(&self.db_connection, &node)?;
         // Phase 5: update tags and links after content change
@@ -341,6 +355,126 @@ impl App {
         self.is_editing = false;
         self.edit_buffer.clear();
         self.refresh_current_note_preserve_selection(Some(&selected_id))?;
+        Ok(())
+    }
+
+    /// Phase 6: Detect [ ] / [x] prefix to set task flags on the node
+    fn apply_task_parsing(node: &mut OutlineNode) {
+        let trimmed = node.content.trim_start();
+        // Accept variants: "[ ] ", "[x] ", "[X] " at the start (after leading spaces)
+        let checkbox_unchecked = trimmed.starts_with("[ ] ") || trimmed.starts_with("[ ]\t");
+        let checkbox_checked = trimmed.starts_with("[x] ") || trimmed.starts_with("[X] ")
+            || trimmed.starts_with("[x]\t") || trimmed.starts_with("[X]\t");
+
+        if checkbox_unchecked || checkbox_checked {
+            node.is_task = true;
+            node.task_completed = checkbox_checked;
+            // Strip the checkbox from stored content for cleaner text rendering
+            let without = if checkbox_unchecked { &trimmed[4..] } else { &trimmed[4..] };
+            // Preserve original leading spaces count
+            let leading_ws_len = node.content.len() - trimmed.len();
+            let leading_ws = &node.content[..leading_ws_len];
+            node.content = format!("{}{}", leading_ws, without);
+        } else {
+            // If no checkbox marker, do not force reset is_task; user may have task without marker
+            // However, if content was emptied of marker and node had been auto-task before, keep as-is
+        }
+    }
+
+    // =========================
+    // Phase 6: Task toggle + log
+    // =========================
+    pub fn toggle_selected_task(&mut self) -> Result<()> {
+        let selected_id = match self.get_selected_node_id() { Some(id) => id, None => return Ok(()) };
+        let mut node = NodeRepository::get_by_id(&self.db_connection, &selected_id)?;
+        if !node.is_task { return Ok(()); }
+        let old = node.task_completed;
+        let now_completed = node.toggle_task();
+        NodeRepository::update(&self.db_connection, &node)?;
+
+        // Log status change
+        let status = if now_completed { TaskStatus::Completed } else { TaskStatus::Uncompleted };
+        let log = TaskStatusLog::new(
+            node.id.clone(),
+            status,
+            Some(old.to_string()),
+            Some(now_completed.to_string()),
+        );
+        let _ = TaskLogRepository::create(&self.db_connection, &log)?;
+
+        self.refresh_current_note_preserve_selection(Some(&selected_id))?;
+        Ok(())
+    }
+
+    // =========================
+    // Phase 6: Calendar helpers
+    // =========================
+    pub fn calendar_move_day(&mut self, delta: i64) {
+        self.calendar_selected = self.calendar_selected + Duration::days(delta);
+        // Keep month view aligned with selected date's month
+        self.calendar_month_start = NaiveDate::from_ymd_opt(
+            self.calendar_selected.year(),
+            self.calendar_selected.month(),
+            1,
+        ).unwrap_or(self.calendar_selected);
+    }
+
+    pub fn calendar_move_week(&mut self, delta_weeks: i64) {
+        self.calendar_move_day(delta_weeks * 7);
+    }
+
+    pub fn calendar_prev_month(&mut self) {
+        let y = self.calendar_month_start.year();
+        let m = self.calendar_month_start.month();
+        let (ny, nm) = if m == 1 { (y - 1, 12) } else { (y, m - 1) };
+        self.calendar_month_start = NaiveDate::from_ymd_opt(ny, nm, 1)
+            .unwrap_or(self.calendar_month_start);
+        // Clamp selected to same day if in same month else first day
+        if self.calendar_selected.year() != ny || self.calendar_selected.month() != nm {
+            self.calendar_selected = self.calendar_month_start;
+        }
+    }
+
+    pub fn calendar_next_month(&mut self) {
+        let y = self.calendar_month_start.year();
+        let m = self.calendar_month_start.month();
+        let (ny, nm) = if m == 12 { (y + 1, 1) } else { (y, m + 1) };
+        self.calendar_month_start = NaiveDate::from_ymd_opt(ny, nm, 1)
+            .unwrap_or(self.calendar_month_start);
+        if self.calendar_selected.year() != ny || self.calendar_selected.month() != nm {
+            self.calendar_selected = self.calendar_month_start;
+        }
+    }
+
+    pub fn calendar_goto_today(&mut self) {
+        let today = chrono::Utc::now().date_naive();
+        self.calendar_selected = today;
+        self.calendar_month_start = NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
+            .unwrap_or(today);
+    }
+
+    /// Open or create the daily note for the selected date
+    pub fn open_selected_daily_note(&mut self) -> Result<()> {
+        let date = self.calendar_selected;
+        // Try existing daily note
+        match DailyNoteRepository::get_by_date(&self.db_connection, date) {
+            Ok(daily) => {
+                self.load_note(&daily.note_id)?;
+            }
+            Err(_) => {
+                // Create a new note and associate
+                let title = format!("{} Daily Note", date.format("%Y-%m-%d"));
+                let note = Note::new(title);
+                NoteRepository::create(&self.db_connection, &note)?;
+                let _ = DailyNoteRepository::get_or_create(
+                    &self.db_connection,
+                    date,
+                    note.id.clone(),
+                )?;
+                self.load_note(&note.id)?;
+                self.refresh_notes_list()?; // include in pages list
+            }
+        }
         Ok(())
     }
 
